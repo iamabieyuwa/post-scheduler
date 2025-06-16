@@ -10,13 +10,14 @@ export default function MediaPreview({ files, onRemove }) {
 
   return (
     <>
-      {/* Grid of Previews */}
       <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
         {files.map((file, index) => {
-          if (!(file instanceof File)) return null;
+          const isCloudinary = typeof file.url === "string";
+          const type = isCloudinary ? file.type : file.type;
+          const url = isCloudinary
+            ? file.url
+            : URL.createObjectURL(file);
 
-          const type = file.type;
-          const url = URL.createObjectURL(file);
           const isImage = type.startsWith("image/");
           const isAudio = type.startsWith("audio/");
           const isVideo = type.startsWith("video/");
@@ -55,14 +56,14 @@ export default function MediaPreview({ files, onRemove }) {
                 </video>
               )}
 
-              {/* Info */}
-              <p className="text-xs text-gray-300 mt-2">
+              <p className="text-xs text-gray-300 mt-2 truncate">
                 <span className="font-medium">Type:</span> {type} <br />
                 <span className="font-medium">Size:</span>{" "}
-                {(file.size / 1024).toFixed(1)} KB
+                {file.size
+                  ? (file.size / 1024).toFixed(1) + " KB"
+                  : "Uploaded"}
               </p>
 
-              {/* Remove Button */}
               {onRemove && (
                 <button
                   onClick={() => onRemove(index)}

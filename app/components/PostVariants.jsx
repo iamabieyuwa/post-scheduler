@@ -2,8 +2,10 @@
 import React from "react";
 
 export default function PostVariants({ value, onChange }) {
+  const { enabled = false, variants = [] } = value || {};
+
   const handleVariantChange = (index, newText) => {
-    const updated = [...value.variants];
+    const updated = [...variants];
     updated[index] = newText;
     onChange({ ...value, variants: updated });
   };
@@ -11,12 +13,12 @@ export default function PostVariants({ value, onChange }) {
   const addVariant = () => {
     onChange({
       ...value,
-      variants: [...(value.variants || []), ""],
+      variants: [...variants, ""],
     });
   };
 
   const removeVariant = (index) => {
-    const updated = value.variants.filter((_, i) => i !== index);
+    const updated = variants.filter((_, i) => i !== index);
     onChange({ ...value, variants: updated });
   };
 
@@ -25,13 +27,13 @@ export default function PostVariants({ value, onChange }) {
       <label className="flex items-center gap-3 text-white text-sm font-semibold mb-4">
         <input
           type="checkbox"
-          checked={value.enabled}
+          checked={enabled}
           onChange={(e) => {
             const newEnabled = e.target.checked;
             onChange({
               ...value,
               enabled: newEnabled,
-              variants: newEnabled ? value.variants || ["", ""] : [],
+              variants: newEnabled ? variants.length ? variants : ["", ""] : [],
             });
           }}
           className="w-5 h-5 accent-blue-500 rounded transition"
@@ -39,9 +41,9 @@ export default function PostVariants({ value, onChange }) {
         Enable Post Variants (A/B Testing)
       </label>
 
-      {value.enabled && (
+      {enabled && (
         <div className="space-y-4">
-          {value.variants.map((variant, index) => (
+          {variants.map((variant, index) => (
             <div key={index} className="relative">
               <textarea
                 value={variant}
@@ -49,7 +51,7 @@ export default function PostVariants({ value, onChange }) {
                 placeholder={`Variant ${index + 1}`}
                 className="w-full bg-[#1e293b] text-white border border-gray-600 rounded-lg px-4 py-2 resize-none placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              {value.variants.length > 1 && (
+              {variants.length > 1 && (
                 <button
                   type="button"
                   onClick={() => removeVariant(index)}
@@ -61,8 +63,7 @@ export default function PostVariants({ value, onChange }) {
             </div>
           ))}
 
-          {/* Add Variant Button */}
-          {value.variants.length < 5 && (
+          {variants.length < 5 && (
             <button
               type="button"
               onClick={addVariant}

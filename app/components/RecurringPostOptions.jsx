@@ -1,29 +1,39 @@
 "use client";
 
-import { useState } from "react";
-
-export default function RecurringPostOptions({ value, onChange }) {
-  const [enabled, setEnabled] = useState(value.enabled || false);
+export default function RecurringPostOptions({ value = {}, onChange, disabled=false }) {
+  const {
+    enabled = false,
+    frequency = "",
+    repeatCount = "",
+    untilDate = "",
+  } = value;
 
   const handleChange = (key, val) => {
     onChange({ ...value, [key]: val });
   };
 
   return (
-    <div className="w-full mt-6 bg-gradient-to-br from-[#1e293b] to-[#0f172a] border border-gray-700/50 rounded-2xl p-5 shadow-xl">
+    <div
+  className={`w-full mt-6 bg-gradient-to-br from-[#1e293b] to-[#0f172a] border border-gray-700/50 rounded-2xl p-5 shadow-xl ${
+    disabled ? "opacity-50 pointer-events-none" : ""
+  }`}
+>
       <label className="flex items-center gap-3 text-white text-sm font-semibold mb-4">
         <input
           type="checkbox"
           checked={enabled}
           onChange={(e) => {
-            setEnabled(e.target.checked);
             handleChange("enabled", e.target.checked);
           }}
           className="w-5 h-5 accent-blue-500 rounded transition duration-200"
         />
         Enable recurring post
       </label>
-
+      {disabled && (
+  <p className="text-xs text-red-400 mb-3">
+    Recurring is disabled when “Post Now” is enabled.
+  </p>
+)}
       {enabled && (
         <div className="space-y-6">
           {/* Frequency Dropdown */}
@@ -32,7 +42,7 @@ export default function RecurringPostOptions({ value, onChange }) {
               Repeat Frequency
             </label>
             <select
-              value={value.frequency || ""}
+              value={frequency}
               onChange={(e) => handleChange("frequency", e.target.value)}
               className="w-full bg-[#1e293b] text-white border border-gray-600 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
@@ -51,7 +61,7 @@ export default function RecurringPostOptions({ value, onChange }) {
             </select>
           </div>
 
-          {/* End Condition: Repeat Count or Until Date */}
+          {/* End Condition */}
           <div>
             <label className="block text-sm font-medium text-white mb-1">
               End Condition
@@ -60,7 +70,7 @@ export default function RecurringPostOptions({ value, onChange }) {
               <input
                 type="number"
                 placeholder="e.g. 5 times"
-                value={value.repeatCount || ""}
+                value={repeatCount}
                 onChange={(e) =>
                   handleChange(
                     "repeatCount",
@@ -72,7 +82,7 @@ export default function RecurringPostOptions({ value, onChange }) {
               <span className="text-gray-400 text-sm text-center">or</span>
               <input
                 type="date"
-                value={value.untilDate || ""}
+                value={untilDate}
                 onChange={(e) => handleChange("untilDate", e.target.value)}
                 className="flex-1 bg-[#1e293b] text-white border border-gray-600 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
