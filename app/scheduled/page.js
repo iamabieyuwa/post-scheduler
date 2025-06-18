@@ -9,34 +9,45 @@ import { FaSpinner } from "react-icons/fa";
 import PostCard from './PostCard'
 import ConfirmDeleteModal from "./ConfirmDeleteModal";
 import toast from "react-hot-toast";
-
-
+import { where } from "firebase/firestore";
+import { auth } from "../lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { useRouter } from "next/navigation";
 export default function ScheduledPostsPage() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [postToDelete, setPostToDelete] = useState(null); // ← at top
-  const [deleting, setDeleting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const router = useRouter();
 
-  useEffect(() => {
-    const fetchPosts = async () => {
-      try {
-        const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
-        const snapshot = await getDocs(q);
-        const fetchedPosts = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setPosts(fetchedPosts);
-      } catch (err) {
-        console.error("❌ Failed to fetch posts:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    if (!currentUser) {
+      router.push("/");
+    }
 
-    fetchPosts();
-  }, []);
+    try {
+      const q = query(
+        collection(db, "posts"),
+        where("userId", "==", currentUser.uid),
+        orderBy("createdAt", "desc")
+      );
+
+      const snapshot = await getDocs(q);
+      const userPosts = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setPosts(userPosts);
+    } catch (err) {
+      console.error("❌ Failed to fetch user posts:", err);
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  return () => unsubscribe();
+}, []);
 
   const handleConfirmDelete = async () => {
     if (!postToDelete?.id) return;
@@ -66,7 +77,7 @@ export default function ScheduledPostsPage() {
       <h1 className="text-3xl font-bold mb-6">📅 Scheduled Posts</h1>
 
       {loading ? (
-        <div className="flex justify-center items-center mt-20">
+        <div className="flex justify-center items-center align-center mt-20">
           <FaSpinner className="animate-spin text-white text-2xl" />
         </div>
       ) : posts.length === 0 ? (

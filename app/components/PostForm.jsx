@@ -1,5 +1,5 @@
 "use client";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import MediaPreview from "./MediaPreview";
 import PostTextarea from "./PostTextarea";
@@ -17,8 +17,8 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../lib/firebase";
 
 
-export default function PostForm({ onAdd }) {
-  const [form, setForm] = useState(getInitialFormState());
+export default function PostForm({  onAdd, onSave, isEdit = false, initialData = null }) {
+   const [form, setForm] = useState(initialData || getInitialFormState());
   const [error, setError] = useState("");
   const fileInputRef = useRef(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -27,18 +27,25 @@ const [activePreview, setActivePreview] = useState("all"); // "twitter", "instag
 const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (!user) {
-        router.push("/");
-      } else {
-        setUser(user);
-      }
-      setCheckingAuth(false);
-    });
-    return () => unsubscribe();
-  }, [router]);
+  const unsubscribe = onAuthStateChanged(auth, (user) => {
+    if (!user && pathname === "/dashboard") {
+      router.push("/");
+    } else {
+      setUser(user);
+    }
+    setCheckingAuth(false);
+  });
+  return () => unsubscribe();
+}, [router, pathname]);
+useEffect(() => {
+  if (initialData) {
+    setForm(initialData);
+  }
+}, [initialData]);
+
 
   if (checkingAuth) return <p className="text-center">Loading...</p>;
 
@@ -184,27 +191,34 @@ const [user, setUser] = useState(null);
       );
   
       // ✅ Build new post
-      const newPost = {
-        id: Date.now(),
-        content: finalContent,
-        platforms,
-        media: uploadedMainMedia,
-        scheduledAt: postNow ? new Date().toISOString() : scheduledAt,
-        postNow,
-        recurring,
-        variantUsed: finalContent !== content ? finalContent : null,
-        postFormat: {
-          thread: uploadedThread,
-          carousel: uploadedCarousel,
-        },
-      };
+     const newPost = {
+  id: Date.now(),
+  content: finalContent,
+  platforms,
+  media: uploadedMainMedia,
+  scheduledAt: postNow ? new Date().toISOString() : scheduledAt,
+  postNow,
+  recurring,
+  variantUsed: finalContent !== content ? finalContent : null,
+  postFormat: {
+    thread: uploadedThread,
+    carousel: uploadedCarousel,
+  },
+  userId: user.uid, // ✅ attach UID
+};
+
   
       const cleanedPost = JSON.parse(JSON.stringify(newPost)); // Removes undefined or invalid objects
       console.log("🧪 Cleaned Post to Firestore:", cleanedPost);
       
+if (isEdit && onSave) {
+  await onSave(newPost); // update existing post
+  return;
+}
 
       // ✅ Save to Firestore
       await addDoc(collection(db, "posts"), {
+        userId: user.uid,
         ...cleanedPost,
         createdAt: serverTimestamp(),
       });
@@ -407,11 +421,12 @@ const [user, setUser] = useState(null);
 
 
       <button
-        type="submit"
-        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-md transition-all"
-      >
-        Schedule Post
-      </button>
+  type="submit"
+  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-md transition-all"
+>
+  {isEdit ? "Update Post" : "Schedule Post"}
+</button>
+
     </form>
   );
 }

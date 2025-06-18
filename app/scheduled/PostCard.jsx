@@ -1,12 +1,12 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 export default function PostCard({ post, onEdit, onDelete, isDeleting }) {
   const { content, platforms, media, scheduledAt, postNow, postFormat } = post;
   const thread = postFormat?.thread || [];
   const carousel = postFormat?.carousel || [];
-  
-
+  const router = useRouter();
   return (
     <div
     className={`bg-[#111] border border-gray-800 rounded-lg p-5 text-white space-y-3 transition-all duration-500 ${
@@ -104,7 +104,7 @@ export default function PostCard({ post, onEdit, onDelete, isDeleting }) {
       {/* Buttons */}
       <div className="flex justify-end gap-2 pt-3">
         <button
-          onClick={() => onEdit(post)}
+          onClick={() => router.push(`/edit/${post.id}`)}
           className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-1 rounded"
         >
           Edit

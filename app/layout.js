@@ -2,6 +2,8 @@ import './globals.css';
 import { Toaster } from "react-hot-toast";
 import NavbarWrapper from "./components/NavbarWrapper";
 import PageWrapper from './components/PageWrapper';
+import { AuthProvider } from "./context/AuthContext";
+
 import { Inter } from "next/font/google";
 export const metadata = {
   title: "PostPilot",
@@ -18,7 +20,7 @@ export default function RootLayout({ children }) {
         <Toaster position="top-right" toastOptions={{ className: "text-sm" }} />
         <NavbarWrapper />
         {/* 💡 Center children fully if homepage, else apply navbar spacing */}
-        <PageWrapper>{children}</PageWrapper>
+       <AuthProvider><PageWrapper>{children}</PageWrapper></AuthProvider>
       </body>
     </html>
   );
