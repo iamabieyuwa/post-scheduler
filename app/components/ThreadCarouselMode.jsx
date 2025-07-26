@@ -4,10 +4,9 @@ import PostTextarea from "./PostTextarea";
 import DropZone from "./DropZone";
 
 export default function ThreadCarouselMode({ value, onChange }) {
-  const {
-    thread = [{ text: "", images: [] }],
-    carousel = [],
-  } = value || {};
+  // Ensure thread and carousel are always arrays to avoid map errors
+  const thread = Array.isArray(value?.thread) ? value.thread : [{ text: "", images: [] }];
+  const carousel = Array.isArray(value?.carousel) ? value.carousel : [];
 
   const [threadEnabled, setThreadEnabled] = useState(!!thread.length);
   const [carouselEnabled, setCarouselEnabled] = useState(!!carousel.length);
@@ -117,7 +116,7 @@ export default function ThreadCarouselMode({ value, onChange }) {
                   {block.images.map((img, imgIndex) => (
                     <div key={imgIndex} className="relative group">
                       <img
-                        src={URL.createObjectURL(img)}
+                        src={typeof img === "string" ? img : URL.createObjectURL(img)}
                         alt={`thread-${index}-${imgIndex}`}
                         className="rounded w-full h-24 object-cover"
                       />
@@ -172,7 +171,7 @@ export default function ThreadCarouselMode({ value, onChange }) {
             {carousel.map((file, index) => (
               <div key={index} className="relative group">
                 <img
-                  src={URL.createObjectURL(file)}
+                  src={typeof file === "string" ? file : URL.createObjectURL(file)}
                   alt={`carousel-${index}`}
                   className="rounded w-full h-32 object-cover"
                 />

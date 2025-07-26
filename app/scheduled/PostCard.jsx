@@ -3,19 +3,24 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 export default function PostCard({ post, onEdit, onDelete, isDeleting }) {
-  const { content, platforms, media, scheduledAt, postNow, postFormat } = post;
-  const thread = postFormat?.thread || [];
-  const carousel = postFormat?.carousel || [];
+  const { content, platforms = [], media = [], scheduledAt, postNow, postFormat = {} } = post;
+  const thread = postFormat.thread || [];
+  const carousel = postFormat.carousel || [];
   const router = useRouter();
+
   return (
     <div
-    className={`bg-[#111] border border-gray-800 rounded-lg p-5 text-white space-y-3 transition-all duration-500 ${
-      isDeleting ? "opacity-0 scale-95 blur-sm" : ""
-    }`}
-  >
+      className={`bg-[#111] border border-gray-800 rounded-lg p-5 text-white space-y-3 transition-all duration-500 ${
+        isDeleting ? "opacity-0 scale-95 blur-sm" : ""
+      }`}
+    >
       {/* Time */}
       <p className="text-sm text-gray-400 font-semibold">
-        {postNow ? "Posting now" : `Scheduled for: ${new Date(scheduledAt).toLocaleString()}`}
+        {postNow
+          ? "Posting now"
+          : scheduledAt
+            ? `Scheduled for: ${new Date(scheduledAt).toLocaleString()}`
+            : "No scheduled time"}
       </p>
 
       {/* Content */}
@@ -31,7 +36,7 @@ export default function PostCard({ post, onEdit, onDelete, isDeleting }) {
         ))}
       </div>
 
-      {/* 🧵 Thread View */}
+      {/* Thread View */}
       {thread.length > 0 && (
         <div className="space-y-4">
           <p className="text-sm text-blue-400 font-semibold">Thread:</p>
@@ -55,7 +60,7 @@ export default function PostCard({ post, onEdit, onDelete, isDeleting }) {
         </div>
       )}
 
-      {/* 🎠 Carousel View */}
+      {/* Carousel View */}
       {carousel.length > 0 && (
         <div className="space-y-2">
           <p className="text-sm text-pink-400 font-semibold">Carousel:</p>
@@ -72,13 +77,13 @@ export default function PostCard({ post, onEdit, onDelete, isDeleting }) {
         </div>
       )}
 
-      {/* 🎞️ Fallback Media */}
-      {media?.length > 0 && thread.length === 0 && carousel.length === 0 && (
+      {/* Fallback Media */}
+      {media.length > 0 && thread.length === 0 && carousel.length === 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {media.map((file, i) => {
-            const isImage = file.type.startsWith("image/");
-            const isVideo = file.type.startsWith("video/");
-            const isAudio = file.type.startsWith("audio/");
+            const isImage = file.type?.startsWith("image/");
+            const isVideo = file.type?.startsWith("video/");
+            const isAudio = file.type?.startsWith("audio/");
 
             return (
               <div key={i} className="rounded overflow-hidden bg-gray-800 p-1">

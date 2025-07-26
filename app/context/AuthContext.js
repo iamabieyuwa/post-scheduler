@@ -18,11 +18,16 @@ export function AuthProvider({ children }) {
         setUser(firebaseUser);
 
         // 🔥 Get user role from Firestore
-        const userRef = doc(db, "users", firebaseUser.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          setRole(userSnap.data().role);
-        } else {
+        try {
+          const userRef = doc(db, "users", firebaseUser.uid);
+          const userSnap = await getDoc(userRef);
+          if (userSnap.exists()) {
+            setRole(userSnap.data().role);
+          } else {
+            setRole(null);
+          }
+        } catch (err) {
+          console.error("AuthContext Firestore error:", err);
           setRole(null);
         }
       } else {

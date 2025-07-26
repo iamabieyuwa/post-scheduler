@@ -3,23 +3,94 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "../lib/firebase";
+import { auth, db } from "../lib/firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { FaInstagram, FaXTwitter } from "react-icons/fa6";
+import { FaSpinner, FaCheckCircle } from "react-icons/fa";
 
 export default function ConnectAccountsPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
+  const [checking, setChecking] = useState(true);
+  const [connected, setConnected] = useState({ twitter: false, instagram: false });
+  const [connecting, setConnecting] = useState({ twitter: false, instagram: false });
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      if (!u) router.push("/");
-      else setUser(u);
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (!u) {
+        router.push("/");
+      } else {
+        setUser(u);
+        // Fetch connection status from Firestore
+        const userDocRef = doc(db, "users", u.uid);
+        const userSnap = await getDoc(userDocRef);
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          setConnected({
+            twitter: !!(data.connectedAccounts && data.connectedAccounts.twitter),
+            instagram: !!(data.connectedAccounts && data.connectedAccounts.instagram),
+          });
+        }
+        setChecking(false);
+      }
     });
     return () => unsub();
   }, [router]);
 
+  const handleConnectTwitter = async () => {
+    setConnecting((c) => ({ ...c, twitter: true }));
+    try {
+      // TODO: Replace with real Twitter OAuth logic
+      // Simulate successful connection:
+      await new Promise((res) => setTimeout(res, 1000));
+      // Update Firestore
+      const userDocRef = doc(db, "users", user.uid);
+      await setDoc(
+        userDocRef,
+        {
+          connectedAccounts: { twitter: true },
+        },
+        { merge: true }
+      );
+      setConnected((c) => ({ ...c, twitter: true }));
+    } catch (e) {
+      alert("Twitter connection failed (demo)");
+    }
+    setConnecting((c) => ({ ...c, twitter: false }));
+  };
+
+  const handleConnectInstagram = async () => {
+    setConnecting((c) => ({ ...c, instagram: true }));
+    try {
+      // TODO: Replace with real Instagram OAuth logic
+      // Simulate successful connection:
+      await new Promise((res) => setTimeout(res, 1000));
+      // Update Firestore
+      const userDocRef = doc(db, "users", user.uid);
+      await setDoc(
+        userDocRef,
+        {
+          connectedAccounts: { instagram: true },
+        },
+        { merge: true }
+      );
+      setConnected((c) => ({ ...c, instagram: true }));
+    } catch (e) {
+      alert("Instagram connection failed (demo)");
+    }
+    setConnecting((c) => ({ ...c, instagram: false }));
+  };
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <FaSpinner className="text-white text-2xl animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-[#0a0a0a] to-[#1a1a1a] text-white flex flex-col items-center justify-center px-6 py-12 font-sans">
+    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-6 py-12 font-sans">
       <div className="text-center mb-10">
         <h1 className="text-4xl font-bold">Connect Your Platforms</h1>
         <p className="mt-3 text-gray-400 text-lg max-w-md mx-auto">
@@ -28,7 +99,7 @@ export default function ConnectAccountsPage() {
       </div>
 
       <div className="grid sm:grid-cols-2 gap-6 w-full max-w-xl">
-        {/* X */}
+        {/* Twitter/X */}
         <div className="bg-[#121212] rounded-xl p-6 border border-gray-700 shadow hover:shadow-blue-500/10 transition-all">
           <div className="flex items-center gap-4">
             <div className="bg-white rounded-full p-3">
@@ -39,12 +110,25 @@ export default function ConnectAccountsPage() {
               <p className="text-sm text-gray-400">Post to your X timeline.</p>
             </div>
           </div>
-          <button
-            onClick={() => alert("X connection coming soon")}
-            className="mt-6 w-full py-2 bg-white text-black font-semibold rounded hover:bg-gray-200 transition"
-          >
-            Connect X
-          </button>
+          {connected.twitter ? (
+            <button
+              disabled
+              className="mt-6 w-full py-2 bg-green-500 text-white font-semibold rounded flex items-center justify-center gap-2"
+            >
+              <FaCheckCircle className="text-white" /> Connected!
+            </button>
+          ) : (
+            <button
+              onClick={handleConnectTwitter}
+              disabled={connecting.twitter}
+              className="mt-6 w-full py-2 bg-white text-black font-semibold rounded hover:bg-gray-200 transition flex items-center justify-center gap-2"
+            >
+              {connecting.twitter && (
+                <FaSpinner className="animate-spin mr-2" />
+              )}
+              Connect X
+            </button>
+          )}
         </div>
 
         {/* Instagram */}
@@ -58,12 +142,25 @@ export default function ConnectAccountsPage() {
               <p className="text-sm text-gray-400">Post reels, images & more.</p>
             </div>
           </div>
-          <button
-            onClick={() => alert("Instagram connection coming soon")}
-            className="mt-6 w-full py-2 bg-gradient-to-r from-pink-500 to-yellow-400 text-white font-semibold rounded hover:opacity-90 transition"
-          >
-            Connect Instagram
-          </button>
+          {connected.instagram ? (
+            <button
+              disabled
+              className="mt-6 w-full py-2 bg-green-500 text-white font-semibold rounded flex items-center justify-center gap-2"
+            >
+              <FaCheckCircle className="text-white" /> Connected!
+            </button>
+          ) : (
+            <button
+              onClick={handleConnectInstagram}
+              disabled={connecting.instagram}
+              className="mt-6 w-full py-2 bg-gradient-to-r from-pink-500 to-yellow-400 text-white font-semibold rounded hover:opacity-90 transition flex items-center justify-center gap-2"
+            >
+              {connecting.instagram && (
+                <FaSpinner className="animate-spin mr-2" />
+              )}
+              Connect Instagram
+            </button>
+          )}
         </div>
       </div>
 

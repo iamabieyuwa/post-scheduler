@@ -3,7 +3,6 @@ import { Toaster } from "react-hot-toast";
 import NavbarWrapper from "./components/NavbarWrapper";
 import PageWrapper from './components/PageWrapper';
 import { AuthProvider } from "./context/AuthContext";
-
 import { Inter } from "next/font/google";
 export const metadata = {
   title: "PostPilot",
