@@ -7,6 +7,7 @@ import { auth, db } from "../lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { FaInstagram, FaXTwitter } from "react-icons/fa6";
 import { FaSpinner, FaCheckCircle } from "react-icons/fa";
+import { generateCodeVerifier, generateCodeChallenge } from "./../utils/pkce"
 
 export default function ConnectAccountsPage() {
   const router = useRouter();
@@ -35,29 +36,40 @@ export default function ConnectAccountsPage() {
       }
     });
     return () => unsub();
-  }, [router]);
+  }, [router]);const handleConnectTwitter = async () => {
+  setConnecting((c) => ({ ...c, twitter: true }));
 
-  const handleConnectTwitter = async () => {
-    setConnecting((c) => ({ ...c, twitter: true }));
-    try {
-      // TODO: Replace with real Twitter OAuth logic
-      // Simulate successful connection:
-      await new Promise((res) => setTimeout(res, 1000));
-      // Update Firestore
-      const userDocRef = doc(db, "users", user.uid);
-      await setDoc(
-        userDocRef,
-        {
-          connectedAccounts: { twitter: true },
-        },
-        { merge: true }
-      );
-      setConnected((c) => ({ ...c, twitter: true }));
-    } catch (e) {
-      alert("Twitter connection failed (demo)");
-    }
+  try {
+    const verifier = generateCodeVerifier();
+    const challenge = await generateCodeChallenge(verifier);
+
+    // Save verifier for use in callback (cookie for server, localStorage for debug)
+    localStorage.setItem("twitter_code_verifier", verifier);
+    document.cookie = `twitter_code_verifier=${verifier}; path=/`;
+
+    // 🔐 NEW: Save Firebase ID token for secure UID lookup
+    const token = await user.getIdToken();
+    document.cookie = `firebase_token=${token}; path=/`;
+
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: process.env.NEXT_PUBLIC_TWITTER_CLIENT_ID,
+      redirect_uri: "http://localhost:3000/api/twitter/callback",
+      scope: "tweet.read tweet.write users.read offline.access",
+      state: "secureState123",
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+    });
+
+    window.location.href = `https://twitter.com/i/oauth2/authorize?${params.toString()}`;
+  } catch (err) {
+    console.error("Twitter PKCE error", err);
+    alert("Failed to initiate Twitter connection.");
     setConnecting((c) => ({ ...c, twitter: false }));
-  };
+  }
+};
+
+
 
   const handleConnectInstagram = async () => {
     setConnecting((c) => ({ ...c, instagram: true }));
