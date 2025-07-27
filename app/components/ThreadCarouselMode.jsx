@@ -2,9 +2,9 @@
 import { useState } from "react";
 import PostTextarea from "./PostTextarea";
 import DropZone from "./DropZone";
+import toast from "react-hot-toast";
 
 export default function ThreadCarouselMode({ value, onChange }) {
-  // Ensure thread and carousel are always arrays to avoid map errors
   const thread = Array.isArray(value?.thread) ? value.thread : [{ text: "", images: [] }];
   const carousel = Array.isArray(value?.carousel) ? value.carousel : [];
 
@@ -15,7 +15,6 @@ export default function ThreadCarouselMode({ value, onChange }) {
     onChange({ ...value, [key]: val });
   };
 
-  // === THREAD ===
   const addThreadItem = () => {
     update("thread", [...thread, { text: "", images: [] }]);
   };
@@ -35,7 +34,13 @@ export default function ThreadCarouselMode({ value, onChange }) {
     const updated = [...thread];
     const prev = updated[index].images || [];
     const incoming = Array.isArray(files) ? files : [files];
-    updated[index].images = [...prev, ...incoming].slice(0, 4); // max 4 images
+
+    if (prev.length + incoming.length > 4) {
+      toast.error("Thread block can only have up to 4 images.");
+      return;
+    }
+
+    updated[index].images = [...prev, ...incoming];
     update("thread", updated);
   };
 
@@ -45,11 +50,15 @@ export default function ThreadCarouselMode({ value, onChange }) {
     update("thread", updated);
   };
 
-  // === CAROUSEL ===
   const handleCarouselUpload = (files) => {
-    const newFiles = Array.isArray(files) ? files : [files];
-    const limited = newFiles.slice(0, 10 - carousel.length);
-    update("carousel", [...carousel, ...limited]);
+    const incoming = Array.isArray(files) ? files : [files];
+
+    if (carousel.length + incoming.length > 10) {
+      toast.error("You can only upload up to 10 carousel images.");
+      return;
+    }
+
+    update("carousel", [...carousel, ...incoming]);
   };
 
   const removeCarouselImage = (index) => {
@@ -58,10 +67,6 @@ export default function ThreadCarouselMode({ value, onChange }) {
 
   return (
     <div className="w-full mt-6 bg-gray-900 border border-gray-700 rounded-xl p-5 shadow-lg text-white">
-      <label className="block font-semibold text-sm mb-2">
-        Post Formats (Select one or both)
-      </label>
-
       <div className="flex gap-4 mb-4">
         <label className="flex items-center gap-2">
           <input
@@ -76,23 +81,8 @@ export default function ThreadCarouselMode({ value, onChange }) {
           />
           🧵 Thread
         </label>
-
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={carouselEnabled}
-            onChange={(e) => {
-              const checked = e.target.checked;
-              setCarouselEnabled(checked);
-              update("carousel", checked ? [] : []);
-            }}
-            className="accent-blue-500"
-          />
-          🖼 Carousel
-        </label>
       </div>
 
-      {/* THREAD MODE */}
       {threadEnabled && (
         <div className="space-y-4">
           {thread.map((block, index) => (
@@ -118,7 +108,7 @@ export default function ThreadCarouselMode({ value, onChange }) {
                       <img
                         src={typeof img === "string" ? img : URL.createObjectURL(img)}
                         alt={`thread-${index}-${imgIndex}`}
-                        className="rounded w-full h-24 object-cover"
+                        className="rounded w-full max-h-56 object-contain bg-white"
                       />
                       <button
                         type="button"
@@ -156,7 +146,6 @@ export default function ThreadCarouselMode({ value, onChange }) {
         </div>
       )}
 
-      {/* CAROUSEL MODE */}
       {carouselEnabled && (
         <div className="space-y-4 mt-6">
           <DropZone
@@ -173,14 +162,14 @@ export default function ThreadCarouselMode({ value, onChange }) {
                 <img
                   src={typeof file === "string" ? file : URL.createObjectURL(file)}
                   alt={`carousel-${index}`}
-                  className="rounded w-full h-32 object-cover"
+                  className="rounded w-full h-40 object-contain bg-white"
                 />
                 <button
                   type="button"
                   onClick={() => removeCarouselImage(index)}
                   className="absolute top-1 right-1 text-white text-xs bg-red-600 px-2 py-1 rounded-full opacity-0 group-hover:opacity-100 transition"
                 >
-                  ✕
+                  X
                 </button>
               </div>
             ))}

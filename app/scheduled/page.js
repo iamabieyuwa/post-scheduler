@@ -1,14 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, orderBy, where, deleteDoc, doc } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  where,
+  deleteDoc,
+  doc,
+  addDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import PostCard from './PostCard';
+import PostCard from "./PostCard";
 import ConfirmDeleteModal from "./ConfirmDeleteModal";
-import { FaSpinner } from 'react-icons/fa';
+import { FaSpinner } from "react-icons/fa";
 
 export default function ScheduledPostsPage() {
   const [posts, setPosts] = useState([]);
@@ -17,6 +27,9 @@ export default function ScheduledPostsPage() {
   const [deletingId, setDeletingId] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
   const router = useRouter();
 
   useEffect(() => {
@@ -41,7 +54,7 @@ export default function ScheduledPostsPage() {
         );
         const snapshot = await getDocs(q);
         const userPosts = snapshot.docs.map((doc) => ({
-          id: doc.id, // Firestore document ID!
+          id: doc.id,
           ...doc.data(),
         }));
         setPosts(userPosts);
@@ -61,7 +74,7 @@ export default function ScheduledPostsPage() {
     setDeletingId(postToDelete.id);
 
     try {
-      await deleteDoc(doc(db, "posts", String(postToDelete?.id))); // Use Firestore doc id
+      await deleteDoc(doc(db, "posts", String(postToDelete.id)));
       toast.success("Post deleted");
       setPosts((prev) => prev.filter((p) => p.id !== postToDelete.id));
       setPostToDelete(null);
@@ -73,29 +86,91 @@ export default function ScheduledPostsPage() {
     }
   };
 
+  const handleDuplicatePost = async (post) => {
+    try {
+      const duplicated = {
+        ...post,
+        scheduledAt: null,
+        postNow: false,
+        createdAt: null,
+      };
+      delete duplicated.id;
+
+      const docRef = await addDoc(collection(db, "posts"), {
+        ...duplicated,
+        createdAt: serverTimestamp(),
+      });
+
+      toast.success("✅ Post duplicated!");
+      router.push(`/edit/${docRef.id}`);
+    } catch (err) {
+      console.error("❌ Failed to duplicate post:", err);
+      toast.error("Could not duplicate post.");
+    }
+  };
+
+  const now = new Date();
+  const filteredPosts = posts
+    .filter((post) =>
+      post.content?.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .filter((post) => {
+      if (statusFilter === "scheduled") {
+        return new Date(post.scheduledAt) > now;
+      }
+      if (statusFilter === "posted") {
+        return new Date(post.scheduledAt) <= now;
+      }
+      return true;
+    });
+
   return (
     <div className="min-h-screen w-full px-4 py-10 text-white">
       <h1 className="text-3xl font-bold mb-6">📅 Scheduled Posts</h1>
 
+      {/* Search & Filter Controls */}
+      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <input
+          type="text"
+          placeholder="🔍 Search by content..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full sm:max-w-md p-2 rounded bg-gray-800 border border-gray-600 text-white"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="p-2 bg-gray-800 text-white border border-gray-600 rounded w-full sm:w-48"
+        >
+          <option value="all">All</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="posted">Already Posted</option>
+        </select>
+      </div>
+
+      {/* Post List */}
       {loading ? (
-        <div className="flex justify-center items-center align-center mt-20">
+        <div className="flex justify-center items-center mt-20">
           <FaSpinner className="animate-spin text-white text-2xl" />
         </div>
-      ) : posts.length === 0 ? (
-        <p className="text-gray-400">No scheduled posts found.</p>
+      ) : filteredPosts.length === 0 ? (
+        <p className="text-gray-400">No posts found.</p>
       ) : (
         <div className="space-y-6">
-          {posts.map((post) => (
+          {filteredPosts.map((post) => (
             <PostCard
-              key={post.id} // Firestore doc id!
+              key={post.id}
               post={post}
-              onEdit={() => router.push(`/edit/${post.id}`)} // Use Firestore doc id!
+              onEdit={() => router.push(`/edit/${post.id}`)}
               onDelete={() => setPostToDelete(post)}
+              onDuplicate={() => handleDuplicatePost(post)}
               isDeleting={deletingId === post.id}
             />
           ))}
         </div>
       )}
+
+      {/* Delete Modal */}
       <ConfirmDeleteModal
         isOpen={!!postToDelete}
         onClose={() => setPostToDelete(null)}

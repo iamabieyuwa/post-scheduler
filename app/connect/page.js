@@ -7,14 +7,16 @@ import { auth, db } from "../lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { FaInstagram, FaXTwitter } from "react-icons/fa6";
 import { FaSpinner, FaCheckCircle } from "react-icons/fa";
-import { generateCodeVerifier, generateCodeChallenge } from "./../utils/pkce"
+import { generateCodeVerifier, generateCodeChallenge } from "./../utils/pkce";
+import { toast } from "sonner";
 
 export default function ConnectAccountsPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
-  const [connected, setConnected] = useState({ twitter: false, instagram: false });
-  const [connecting, setConnecting] = useState({ twitter: false, instagram: false });
+  const [connected, setConnected] = useState({ twitter: false });
+  const [connecting, setConnecting] = useState({ twitter: false });
+  const [twitterUsername, setTwitterUsername] = useState("");
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -22,75 +24,99 @@ export default function ConnectAccountsPage() {
         router.push("/");
       } else {
         setUser(u);
-        // Fetch connection status from Firestore
         const userDocRef = doc(db, "users", u.uid);
         const userSnap = await getDoc(userDocRef);
         if (userSnap.exists()) {
           const data = userSnap.data();
-          setConnected({
-            twitter: !!(data.connectedAccounts && data.connectedAccounts.twitter),
-            instagram: !!(data.connectedAccounts && data.connectedAccounts.instagram),
-          });
+          const isTwitterConnected = data.connectedAccounts?.twitter === true;
+          setConnected({ twitter: isTwitterConnected });
+          if (isTwitterConnected) {
+            setTwitterUsername(data.twitterProfile?.username || "");
+            toast.success(`Connected to @${data.twitterProfile?.username}`);
+            setTimeout(() => {
+              router.push("/dashboard");
+            }, 3000);
+          }
         }
         setChecking(false);
       }
     });
     return () => unsub();
-  }, [router]);const handleConnectTwitter = async () => {
-  setConnecting((c) => ({ ...c, twitter: true }));
+  }, [router]);
 
-  try {
-    const verifier = generateCodeVerifier();
-    const challenge = await generateCodeChallenge(verifier);
+  useEffect(() => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const disconnected = urlParams.get("disconnected");
 
-    // Save verifier for use in callback (cookie for server, localStorage for debug)
-    localStorage.setItem("twitter_code_verifier", verifier);
-    document.cookie = `twitter_code_verifier=${verifier}; path=/`;
-
-    // 🔐 NEW: Save Firebase ID token for secure UID lookup
-    const token = await user.getIdToken();
-    document.cookie = `firebase_token=${token}; path=/`;
-
-    const params = new URLSearchParams({
-      response_type: "code",
-      client_id: process.env.NEXT_PUBLIC_TWITTER_CLIENT_ID,
-      redirect_uri: "http://localhost:3000/api/twitter/callback",
-      scope: "tweet.read tweet.write users.read offline.access",
-      state: "secureState123",
-      code_challenge: challenge,
-      code_challenge_method: "S256",
-    });
-
-    window.location.href = `https://twitter.com/i/oauth2/authorize?${params.toString()}`;
-  } catch (err) {
-    console.error("Twitter PKCE error", err);
-    alert("Failed to initiate Twitter connection.");
-    setConnecting((c) => ({ ...c, twitter: false }));
+  if (disconnected === "twitter") {
+    toast.success("Disconnected from Twitter");
+    const cleanUrl = window.location.origin + window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
   }
-};
+}, []);
 
+useEffect(() => {
+  const unsub = onAuthStateChanged(auth, async (u) => {
+    if (!u) {
+      router.push("/");
+    } else {
+      setUser(u);
+      const userDocRef = doc(db, "users", u.uid);
+      const userSnap = await getDoc(userDocRef);
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        const isTwitterConnected = !!(data.connectedAccounts && data.connectedAccounts.twitter);
+        setConnected({ twitter: isTwitterConnected });
 
-
-  const handleConnectInstagram = async () => {
-    setConnecting((c) => ({ ...c, instagram: true }));
-    try {
-      // TODO: Replace with real Instagram OAuth logic
-      // Simulate successful connection:
-      await new Promise((res) => setTimeout(res, 1000));
-      // Update Firestore
-      const userDocRef = doc(db, "users", user.uid);
-      await setDoc(
-        userDocRef,
-        {
-          connectedAccounts: { instagram: true },
-        },
-        { merge: true }
-      );
-      setConnected((c) => ({ ...c, instagram: true }));
-    } catch (e) {
-      alert("Instagram connection failed (demo)");
+        if (isTwitterConnected) {
+          setTwitterUsername(data.twitterProfile?.username || "");
+          toast.success(`Connected to @${data.twitterProfile?.username}`);
+          setTimeout(() => router.push("/dashboard"), 3000);
+        }
+      }
+      setChecking(false);
     }
-    setConnecting((c) => ({ ...c, instagram: false }));
+  });
+  return () => unsub();
+}, [router]);
+
+
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const disconnected = params.get("disconnected");
+
+  if (disconnected === "twitter") {
+    toast.success("Disconnected from Twitter.");
+  }
+}, []);
+
+
+  const handleConnectTwitter = async () => {
+    setConnecting((c) => ({ ...c, twitter: true }));
+    try {
+      const verifier = generateCodeVerifier();
+      const challenge = await generateCodeChallenge(verifier);
+      localStorage.setItem("twitter_code_verifier", verifier);
+      document.cookie = `twitter_code_verifier=${verifier}; path=/`;
+      const token = await user.getIdToken();
+      document.cookie = `firebase_token=${token}; path=/`;
+
+      const params = new URLSearchParams({
+        response_type: "code",
+        client_id: process.env.NEXT_PUBLIC_TWITTER_CLIENT_ID,
+        redirect_uri: "http://localhost:3000/api/twitter/callback",
+        scope: "tweet.read tweet.write users.read offline.access",
+        state: "secureState123",
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+      });
+
+      window.location.href = `https://twitter.com/i/oauth2/authorize?${params.toString()}`;
+    } catch (err) {
+      console.error("Twitter PKCE error", err);
+      alert("Failed to initiate Twitter connection.");
+      setConnecting((c) => ({ ...c, twitter: false }));
+    }
   };
 
   if (checking) {
@@ -122,66 +148,58 @@ export default function ConnectAccountsPage() {
               <p className="text-sm text-gray-400">Post to your X timeline.</p>
             </div>
           </div>
-          {connected.twitter ? (
-            <button
-              disabled
-              className="mt-6 w-full py-2 bg-green-500 text-white font-semibold rounded flex items-center justify-center gap-2"
-            >
-              <FaCheckCircle className="text-white" /> Connected!
-            </button>
+{connected.twitter ? (
+  <div className="mt-6">
+    <p className="text-sm text-green-400 mb-1">
+      Connected as <span className="font-semibold">@{twitterUsername}</span>
+    </p>
+    <button
+      disabled
+      className="w-full py-2 bg-green-500 text-white font-semibold rounded flex items-center justify-center gap-2"
+    >
+      <FaCheckCircle className="text-white" /> Connected!
+    </button>
+  </div>
           ) : (
             <button
               onClick={handleConnectTwitter}
               disabled={connecting.twitter}
               className="mt-6 w-full py-2 bg-white text-black font-semibold rounded hover:bg-gray-200 transition flex items-center justify-center gap-2"
             >
-              {connecting.twitter && (
-                <FaSpinner className="animate-spin mr-2" />
-              )}
+              {connecting.twitter && <FaSpinner className="animate-spin mr-2" />}
               Connect X
             </button>
           )}
         </div>
 
-        {/* Instagram */}
-        <div className="bg-[#121212] rounded-xl p-6 border border-gray-700 shadow hover:shadow-pink-500/10 transition-all">
+        {/* Instagram - disabled for now */}
+        <div className="bg-[#121212] rounded-xl p-6 border border-gray-700 opacity-50 cursor-not-allowed">
           <div className="flex items-center gap-4">
             <div className="bg-gradient-to-br from-pink-500 to-yellow-400 rounded-full p-3">
               <FaInstagram className="text-white text-xl" />
             </div>
             <div>
               <h2 className="text-lg font-semibold">Connect Instagram</h2>
-              <p className="text-sm text-gray-400">Post reels, images & more.</p>
+              <p className="text-sm text-gray-400">Coming soon</p>
             </div>
           </div>
-          {connected.instagram ? (
-            <button
-              disabled
-              className="mt-6 w-full py-2 bg-green-500 text-white font-semibold rounded flex items-center justify-center gap-2"
-            >
-              <FaCheckCircle className="text-white" /> Connected!
-            </button>
-          ) : (
-            <button
-              onClick={handleConnectInstagram}
-              disabled={connecting.instagram}
-              className="mt-6 w-full py-2 bg-gradient-to-r from-pink-500 to-yellow-400 text-white font-semibold rounded hover:opacity-90 transition flex items-center justify-center gap-2"
-            >
-              {connecting.instagram && (
-                <FaSpinner className="animate-spin mr-2" />
-              )}
-              Connect Instagram
-            </button>
-          )}
+          <button
+            disabled
+            className="mt-6 w-full py-2 bg-gradient-to-r from-pink-500 to-yellow-400 text-white font-semibold rounded opacity-70"
+          >
+            Coming Soon
+          </button>
         </div>
       </div>
 
-      <button
-        onClick={() => router.push("/dashboard")}
-        className="mt-10 text-blue-400 hover:text-blue-500 underline transition text-sm"
-      >
-        Skip for now →
-      </button>
+      {!connected.twitter && (
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="mt-10 text-blue-400 hover:text-blue-500 underline transition text-sm"
+        >
+          Skip for now →
+        </button>
+      )}
     </div>
   );
 }

@@ -10,9 +10,12 @@ import {
   EmailAuthProvider,
   reauthenticateWithCredential,
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { generateCodeVerifier, generateCodeChallenge } from "../utils/pkce"
 import toast from "react-hot-toast";
 import { FaSpinner } from "react-icons/fa";
+import { FaXTwitter } from "react-icons/fa6";
+import ConfirmDisconnectModal from "../settings/ConfirmDisconnectModal"
 
 export default function SettingsPage() {
   const [user, setUser] = useState(null);
@@ -20,6 +23,8 @@ export default function SettingsPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
+const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+const [isDisconnecting, setIsDisconnecting] = useState(false);
   // Change Email State
   const [newEmail, setNewEmail] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
@@ -35,33 +40,43 @@ export default function SettingsPage() {
   // Email verification reminder
   const [showVerifyReminder, setShowVerifyReminder] = useState(false);
   const [verifyLoading, setVerifyLoading] = useState(false);
+  const [twitterProfile, setTwitterProfile] = useState(null);
+  const [connectingTwitter, setConnectingTwitter] = useState(false);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) return;
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    if (!currentUser) return;
 
-      setUser(currentUser);
-      setCurrentEmail(currentUser.email);
+    setUser(currentUser);
+    setCurrentEmail(currentUser.email);
 
-      try {
-        const userRef = doc(db, "users", currentUser.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          const data = userSnap.data();
-          if (data.role === "admin") {
-            setIsAdmin(true);
-          }
+    try {
+      const userRef = doc(db, "users", currentUser.uid);
+      const snap = await getDoc(userRef);
+
+      if (snap.exists()) {
+        const data = snap.data();
+
+        if (data.role === "admin") {
+          setIsAdmin(true);
         }
-        setShowVerifyReminder(!currentUser.emailVerified);
-      } catch (err) {
-        console.error("Failed to fetch role:", err);
-      } finally {
-        setLoading(false);
-      }
-    });
 
-    return () => unsubscribe();
-  }, []);
+        if (data.connectedAccounts?.twitter && data.twitterProfile) {
+          setTwitterProfile(data.twitterProfile);
+        }
+      }
+
+      setShowVerifyReminder(!currentUser.emailVerified);
+    } catch (err) {
+      console.error("Failed to fetch user settings:", err);
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  return () => unsubscribe();
+}, []);
+
 
   // Reload user to check verification status
   const handleCheckVerified = async () => {
@@ -152,6 +167,34 @@ export default function SettingsPage() {
     setEmailLoading(false);
   };
 
+  const handleConnectTwitter = async () => {
+  if (!user) return;
+  try {
+    const verifier = generateCodeVerifier();
+    const challenge = await generateCodeChallenge(verifier);
+    localStorage.setItem("twitter_code_verifier", verifier);
+    document.cookie = `twitter_code_verifier=${verifier}; path=/`;
+    const token = await user.getIdToken();
+    document.cookie = `firebase_token=${token}; path=/`;
+
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: process.env.NEXT_PUBLIC_TWITTER_CLIENT_ID,
+      redirect_uri: "http://localhost:3000/api/twitter/callback",
+      scope: "tweet.read tweet.write users.read offline.access",
+      state: "secureState123",
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+    });
+
+    window.location.href = `https://twitter.com/i/oauth2/authorize?${params.toString()}`;
+  } catch (err) {
+    console.error("Twitter PKCE error", err);
+    toast.error("Failed to initiate Twitter connection.");
+  }
+};
+
+
   // Re-authenticate and retry email change
   const handleReauthAndChangeEmail = async (e) => {
     e.preventDefault();
@@ -214,6 +257,30 @@ export default function SettingsPage() {
     }
     setPassLoading(false);
   };
+  const handleDisconnectTwitter = async () => {
+  if (!user) return;
+  setIsDisconnecting(true);
+  try {
+    await setDoc(
+      doc(db, "users", user.uid),
+      {
+        connectedAccounts: { twitter: false },
+        twitterProfile: null,
+        twitterTokens: null,
+      },
+      { merge: true }
+    );
+    setTwitterProfile(null);
+    toast.success("Disconnected from X (Twitter)");
+  } catch (err) {
+    console.error("Error disconnecting Twitter:", err);
+    toast.error("Failed to disconnect");
+  } finally {
+    setIsDisconnecting(false);
+    setShowDisconnectModal(false);
+  }
+};
+
 
   if (loading) {
     return (
@@ -412,6 +479,7 @@ export default function SettingsPage() {
                 autoComplete="new-password"
               />
             </div>
+           
             <button
               type="submit"
               disabled={passLoading}
@@ -422,8 +490,57 @@ export default function SettingsPage() {
               ) : null}
               {passLoading ? "Updating..." : "Update Password"}
             </button>
+      
+
+
           </form>
         )}
+
+               <div className="mt-10 border-t border-gray-700 pt-6">
+  <h2 className="text-base sm:text-lg font-semibold text-gray-200 mb-3 ">
+  <div className="flex items-center gap-2">
+     <FaXTwitter /> Account
+  </div>
+  </h2>
+
+  {twitterProfile ? (
+    // Connected UI
+    <div className="bg-gray-900 rounded-lg p-4 border border-gray-700 flex items-center justify-between">
+      <div>
+        <div className="text-sm sm:text-base font-medium text-white">
+          @{twitterProfile.username}
+        </div>
+        <div className="text-xs text-gray-400">{twitterProfile.name}</div>
+      </div>
+     <button
+  onClick={() => setShowDisconnectModal(true)}
+  className="px-3 py-1.5 rounded bg-red-600 hover:bg-red-500 text-sm font-semibold text-white"
+>
+  Disconnect
+</button>
+
+<ConfirmDisconnectModal
+  isOpen={showDisconnectModal}
+  onClose={() => setShowDisconnectModal(false)}
+  onConfirm={handleDisconnectTwitter}
+  isDisconnecting={isDisconnecting}
+/>
+
+    </div>
+  ) : (
+    // Reconnect button
+   <button
+    onClick={handleConnectTwitter}
+    disabled={connectingTwitter}
+    className="mt-4 flex items-center gap-2 px-4 py-2 rounded bg-white text-black font-semibold hover:bg-gray-200 transition"
+  >
+    {connectingTwitter && <FaSpinner className="animate-spin text-black" />}
+    {!connectingTwitter && <FaXTwitter className="text-black" />}
+    {connectingTwitter ? "Connecting..." : "Connect X"}
+  </button>
+
+  )}
+</div>
       </div>
     </div>
   );
