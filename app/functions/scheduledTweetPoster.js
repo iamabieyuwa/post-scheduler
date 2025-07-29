@@ -1,13 +1,21 @@
 import { TwitterApi } from 'twitter-api-v2';
-import { initializeApp, applicationDefault } from 'firebase-admin/app';
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
-initializeApp({ credential: applicationDefault() });
+
+if (!getApps().length) {
+  initializeApp({
+    credential: cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    }),
+  });
+}
 
 const db = getFirestore();
-
 // Upload media file from a public URL to Twitter
 async function uploadMedia(twitterClient, mediaList = []) {
   const uploadedIds = [];
