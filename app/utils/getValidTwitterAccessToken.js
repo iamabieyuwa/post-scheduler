@@ -1,4 +1,4 @@
-import { getFirestore, doc, getDoc, setDoc } from "firebase-admin/firestore";
+import { getFirestore } from "firebase-admin/firestore";
 import { initializeApp, cert, getApps } from "firebase-admin/app";
 
 // ✅ Initialize Firebase Admin once
@@ -15,9 +15,10 @@ if (!getApps().length) {
 const db = getFirestore();
 
 export async function getValidTwitterToken(uid) {
-  const userRef = doc(db, "users", uid);
-  const snap = await getDoc(userRef);
-  if (!snap.exists()) throw new Error("User not found");
+  const userRef = db.collection("users").doc(uid);
+  const snap = await userRef.get();
+
+  if (!snap.exists) throw new Error("User not found");
 
   const { twitterTokens } = snap.data();
   if (!twitterTokens) throw new Error("Twitter tokens missing");
@@ -51,8 +52,7 @@ export async function getValidTwitterToken(uid) {
     throw new Error("Failed to refresh Twitter token");
   }
 
-  await setDoc(
-    userRef,
+  await userRef.set(
     {
       twitterTokens: {
         access_token: newData.access_token,
