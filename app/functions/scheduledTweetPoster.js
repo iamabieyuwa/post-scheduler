@@ -1,7 +1,7 @@
-import { TwitterApi } from 'twitter-api-v2';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import * as dotenv from 'dotenv';
+import { getValidTwitterToken } from '../utils/getValidTwitterAccessToken.js';
 
 dotenv.config();
 
@@ -16,27 +16,6 @@ if (!getApps().length) {
 }
 
 const db = getFirestore();
-// Upload media file from a public URL to Twitter
-async function uploadMedia(twitterClient, mediaList = []) {
-  const uploadedIds = [];
-
-  for (const media of mediaList) {
-    try {
-      const res = await fetch(media.url);
-      const buffer = await res.arrayBuffer();
-
-      const mediaId = await twitterClient.v1.uploadMedia(Buffer.from(buffer), {
-        mimeType: media.type,
-      });
-
-      uploadedIds.push(mediaId);
-    } catch (e) {
-      console.error('❌ Media upload failed:', e.message);
-    }
-  }
-
-  return uploadedIds;
-}
 
 export async function postScheduledTweets() {
   const now = new Date();
@@ -46,7 +25,7 @@ export async function postScheduledTweets() {
     .collection('posts')
     .where('postNow', '==', false)
     .where('scheduledAt', '<=', now.toISOString())
-    .where('status', '==', 'pending') // 🔥 Safer than using '!='
+    .where('status', '==', 'pending')
     .get();
 
   if (snapshot.empty) {
@@ -59,62 +38,41 @@ export async function postScheduledTweets() {
     const postId = docSnap.id;
 
     try {
-      // 2. Get user's connected Twitter account
+      // 2. Get user's Twitter OAuth2 tokens
       const userDoc = await db.collection('users').doc(post.userId).get();
-      const twitter = userDoc.data()?.connectedAccounts?.twitter;
+      const userData = userDoc.data();
+      const tokens = userData?.twitterTokens;
 
-      if (!twitter) throw new Error(`User ${post.userId} not connected to Twitter`);
+      if (!tokens?.access_token || !tokens?.refresh_token) {
+        throw new Error(`User ${post.userId} missing Twitter tokens`);
+      }
 
-      const twitterClient = new TwitterApi({
-        appKey: process.env.TWITTER_API_KEY,
-        appSecret: process.env.TWITTER_API_SECRET,
-        accessToken: twitter.accessToken,
-        accessSecret: twitter.accessSecret,
+      // 3. Get valid access token (refresh if needed)
+      const accessToken = await getValidTwitterToken(post.userId);
+
+      // 4. Post to Twitter v2 (text-only for now)
+      const tweetText = post.content || '[Empty post]';
+
+      const twitterRes = await fetch('https://api.twitter.com/2/tweets', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: tweetText }),
       });
 
-      // 3. Media Upload (if any)
-      let globalMediaIds = [];
-      if (Array.isArray(post.media) && post.media.length > 0) {
-        globalMediaIds = await uploadMedia(twitterClient, post.media);
+      const tweetResult = await twitterRes.json();
+
+      if (!twitterRes.ok) {
+        throw new Error(`Twitter API error: ${JSON.stringify(tweetResult)}`);
       }
 
-      // 4. Thread Posting
-      const thread = post.postFormat?.thread;
-      let tweetResponse = null;
-
-      if (Array.isArray(thread) && thread.length > 0) {
-        let lastTweetId = null;
-
-        for (const block of thread) {
-          const text = block.text?.trim() || "";
-          if (!text && !block.images?.length) continue;
-
-          let blockMediaIds = [];
-          if (Array.isArray(block.images) && block.images.length > 0) {
-            blockMediaIds = await uploadMedia(twitterClient, block.images);
-          }
-
-          const tweet = await twitterClient.v2.tweet({
-            text: text || "(image only)",
-            reply: lastTweetId ? { in_reply_to_tweet_id: lastTweetId } : undefined,
-            media: blockMediaIds.length ? { media_ids: blockMediaIds } : undefined,
-          });
-
-          lastTweetId = tweet.data.id;
-        }
-      } else {
-        // 5. Fallback Single Post
-        tweetResponse = await twitterClient.v2.tweet({
-          text: post.content || "[Empty post]",
-          media: globalMediaIds.length ? { media_ids: globalMediaIds } : undefined,
-        });
-      }
-
-      // 6. Update post status
+      // 5. Update post status
       await db.collection('posts').doc(postId).update({
         status: 'posted',
         postedAt: new Date().toISOString(),
-        twitterId: tweetResponse?.data?.id || null,
+        twitterId: tweetResult.data?.id || null,
       });
 
       console.log(`✅ Posted successfully: ${postId}`);
