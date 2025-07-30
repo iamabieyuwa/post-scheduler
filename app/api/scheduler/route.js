@@ -1,5 +1,5 @@
 // app/api/scheduler/route.js
-import { postScheduledTweets } from "@/functions/scheduledTweetPoster";
+import { postScheduledTweets} from '../../functions/scheduledTweetPoster.js';
 
 export const runtime = 'nodejs'; // use `edge` if you're doing lightweight things
 

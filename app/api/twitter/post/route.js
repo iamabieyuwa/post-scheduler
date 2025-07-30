@@ -2,7 +2,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
-import { getValidTwitterAccessToken } from "@/lib/twitter";
+import { getValidTwitterAccessToken } from '../../../lib/twitter'
 
 export async function POST(req) {
   try {
