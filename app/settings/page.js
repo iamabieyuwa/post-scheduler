@@ -344,7 +344,7 @@ useEffect(() => {
                 disabled={verifyLoading}
                 className="px-3 py-1 rounded bg-gray-700 text-white font-semibold hover:bg-gray-600 transition"
               >
-                I've Verified My Email
+                I&apos;ve Verified My Email
               </button>
             </div>
           </div>
