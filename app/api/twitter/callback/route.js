@@ -44,7 +44,7 @@ export async function GET(req) {
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code,
-        redirect_uri: "http://localhost:3000/api/twitter/callback",
+        redirect_uri: "http://post-scheduler-pearl.vercel.app/api/twitter/callback",
         client_id: process.env.TWITTER_CLIENT_ID,
         code_verifier: codeVerifier,
       }),
