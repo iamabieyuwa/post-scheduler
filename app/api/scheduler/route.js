@@ -4,7 +4,11 @@ export const config = {
   schedule: '*/1 * * * *', // Every minute
 };
 
-export async function GET() {
+export async function GET(req) {
+    const auth = req.headers.get('Authorization');
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return new Response('Unauthorized', { status: 401 });
+  }
   try {
     console.log('🔁 Cron job triggered at', new Date().toISOString());
 
