@@ -180,7 +180,7 @@ useEffect(() => {
     const params = new URLSearchParams({
       response_type: "code",
       client_id: process.env.NEXT_PUBLIC_TWITTER_CLIENT_ID,
-      redirect_uri: "http://localhost:3000/api/twitter/callback",
+      redirect_uri: "http://post-scheduler-pearl.vercel.app/api/twitter/callback",
       scope: "tweet.read tweet.write users.read offline.access",
       state: "secureState123",
       code_challenge: challenge,
