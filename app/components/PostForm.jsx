@@ -75,14 +75,7 @@ export default function PostForm({ onAdd, onSave, isEdit = false, initialData = 
   const handleChange = (e) => {
     const { name, value, type, checked, files } = e.target;
     setError("");
-    if (type === "checkbox") {
-      setForm((prev) => ({
-        ...prev,
-        platforms: checked
-          ? [...prev.platforms, value.toLowerCase()]
-          : prev.platforms.filter((p) => p !== value.toLowerCase()),
-      }));
-    } else if (type === "file") {
+    if (type === "file") {
       if (name === "media") {
         setNewMedia([...newMedia, ...Array.from(files)]);
       } else if (name === "carousel") {
@@ -105,14 +98,11 @@ export default function PostForm({ onAdd, onSave, isEdit = false, initialData = 
     return div.textContent || div.innerText || "";
   };
 
-  const getCharLimit = (platforms) => {
-    if (platforms.includes("twitter")) return 280;
-    // if (platforms.includes("instagram")) return 2200;
-    return 0;
-  };
+  const getCharLimit = () => 280;
+
 
   const plainText = getPlainText(form.content);
-  const charLimit = getCharLimit(form.platforms);
+ const charLimit = getCharLimit();
   const contentLength = plainText.length;
 
   async function uploadToCloudinary(file) {
@@ -129,101 +119,151 @@ export default function PostForm({ onAdd, onSave, isEdit = false, initialData = 
   }
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
+  setError("");
+  setLoading(true);
+
+  const { content, scheduledAt, postNow, variants, recurring, postFormat } = form;
+  let finalContent = content;
+
+  // Handle variants (A/B testing)
+  if (variants?.enabled && variants.variants.length > 0) {
+    const options = variants.variants.filter((v) => v.trim() !== "");
+    if (options.length > 0) {
+      const randomIndex = Math.floor(Math.random() * options.length);
+      finalContent = options[randomIndex];
+    }
+  }
+
+  const thread = postFormat?.thread || [];
+  const carousel = postFormat?.carousel || [];
+  const threadEnabled = thread.length > 0;
+  const carouselEnabled = carousel.length > 0;
+
+  // Ensure there's something to post
+  if (!finalContent && !threadEnabled && !carouselEnabled) {
+    return setError("Add content, a thread, or a carousel to post.");
+  }
+
+  // Thread block validation
+  const invalidThread = threadEnabled && thread.some(
+    (t) => !t.text.trim() && (!t.images || !t.images.length)
+  );
+  if (invalidThread) {
+    return setError("Each thread block must have text or image.");
+  }
+
+  // Twitter-specific media rules
+  const totalMedia = [...existingMedia, ...newMedia];
+  const imageCount = totalMedia.filter((f) => f.type?.startsWith("image/")).length;
+  const videoCount = totalMedia.filter((f) => f.type?.startsWith("video/")).length;
+
+  if (totalMedia.length > 4) {
+    return setError("You can only upload up to 4 media files for Twitter.");
+  }
+  if (videoCount > 1) {
+    return setError("Twitter only allows one video per post.");
+  }
+  if (videoCount >= 1 && imageCount >= 1) {
+    return setError("You can't mix images and video in a single Twitter post.");
+  }
+
+  if (!postNow && !scheduledAt) {
+    return setError("Please select a date and time.");
+  }
+
+  try {
+    // Upload media to Cloudinary
+    const uploadedMedia = await Promise.all(
+      (newMedia || []).map(async (file) => {
+        const url = await uploadToCloudinary(file);
+        return {
+          url,
+          type: file.type,
+          name: file.name,
+          size: file.size,
+        };
+      })
+    );
+
+    const uploadedCarousel = await Promise.all(
+      (newCarousel || []).map(async (file) => {
+        const url = await uploadToCloudinary(file);
+        return {
+          url,
+          type: file.type,
+          name: file.name,
+          size: file.size,
+        };
+      })
+    );
+
+    // Upload thread images
+    let uploadedThread = thread;
+    if (threadEnabled) {
+      uploadedThread = await Promise.all(
+        thread.map(async (block) => {
+          const uploadedImages = await Promise.all(
+            (block.images || []).map(async (file) => {
+              if (typeof file === "string") return file;
+              const url = await uploadToCloudinary(file);
+              return url;
+            })
+          );
+          return {
+            text: block.text,
+            images: uploadedImages,
+          };
+        })
+      );
+    }
+
+    const newPost = {
+      content: finalContent,
+      platforms: ["twitter"],
+      media: [...existingMedia, ...uploadedMedia],
+      scheduledAt: postNow ? new Date().toISOString() : scheduledAt,
+      postNow,
+      recurring,
+      variantUsed: finalContent !== content ? finalContent : null,
+      postFormat: {
+        thread: uploadedThread,
+        carousel: [...existingCarousel, ...uploadedCarousel],
+      },
+      userId: user.uid,
+      status: postNow ? "posted" : "pending",
+    };
+
+    const cleanedPost = JSON.parse(JSON.stringify(newPost));
+
+    if (isEdit && onSave) {
+      await onSave({ ...newPost, id: initialData?.id });
+      return;
+    }
+
+    const docRef = await addDoc(collection(db, "posts"), {
+      ...cleanedPost,
+      createdAt: serverTimestamp(),
+    });
+
+    if (onAdd) onAdd({ ...cleanedPost, id: docRef.id });
+
+    toast.success("✅ Post saved to Firestore!");
+    setForm(getInitialFormState());
+    setExistingMedia([]);
+    setExistingCarousel([]);
+    setNewMedia([]);
+    setNewCarousel([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setError("");
-    setLoading(true)
-
-    const { content, platforms, scheduledAt, postNow, variants, recurring, postFormat } = form;
-    let finalContent = content;
-
-    if (variants?.enabled && variants.variants.length > 0) {
-      const options = variants.variants.filter((v) => v.trim() !== "");
-      if (options.length > 0) {
-        const randomIndex = Math.floor(Math.random() * options.length);
-        finalContent = options[randomIndex];
-      }
-    }
-
-    const thread = postFormat?.thread || [];
-    const carousel = postFormat?.carousel || [];
-    const threadEnabled = thread.length > 0;
-    const carouselEnabled = carousel.length > 0;
-
-    if (!finalContent && !threadEnabled && !carouselEnabled) {
-      return setError("Add content, a thread, or a carousel to post.");
-    }
-    const invalidThread =
-      threadEnabled && thread.some((t) => !t.text.trim() && (!t.images || !t.images.length));
-    if (invalidThread) {
-      return setError("Each thread block must have text or image.");
-    }
-    if (existingCarousel.length + newCarousel.length > 10) {
-      return setError("You can only upload up to 10 images for carousel.");
-    }
-    if (!postNow && !scheduledAt) {
-      return setError("Please select a date and time.");
-    }
-    try {
-      const uploadedMedia = await Promise.all(
-        (newMedia || []).map(async (file) => {
-          const url = await uploadToCloudinary(file);
-          return { url, type: file.type, name: file.name, size: file.size };
-        })
-      );
-
-      const uploadedCarousel = await Promise.all(
-        (newCarousel || []).map(async (file) => {
-          const url = await uploadToCloudinary(file);
-          return { url, type: file.type, name: file.name, size: file.size };
-        })
-      );
-
-      const newPost = {
-  content: finalContent,
-  platforms,
-  media: [...existingMedia, ...uploadedMedia],
-  scheduledAt: postNow ? new Date().toISOString() : scheduledAt,
-  postNow,
-  recurring,
-  variantUsed: finalContent !== content ? finalContent : null,
-  postFormat: {
-    ...postFormat,
-    carousel: [...existingCarousel, ...uploadedCarousel],
-  },
-  userId: user.uid,
-  status: postNow ? 'posted' : 'pending', // ✅ This is the key addition
+  } catch (err) {
+    console.error("❌ Failed to save post:", err);
+    toast.error("Could not save post to database.");
+  } finally {
+    setLoading(false);
+  }
 };
 
-
-      const cleanedPost = JSON.parse(JSON.stringify(newPost));
-      if (isEdit && onSave) {
-        await onSave({ ...newPost, id: initialData?.id });
-
-        return;
-      }
-
-      const docRef = await addDoc(collection(db, "posts"), {
-        ...cleanedPost,
-        createdAt: serverTimestamp(),
-      });
-
-      if (onAdd) onAdd({ ...cleanedPost, id: docRef.id });
-
-      toast.success("✅ Post saved to Firestore!");
-      setForm(getInitialFormState());
-      setExistingMedia([]);
-      setExistingCarousel([]);
-      setNewMedia([]);
-      setNewCarousel([]);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      setError("");
-    } catch (err) {
-      console.error("❌ Failed to save post:", err);
-      toast.error("Could not save post to database.");
-    }finally{
-      setLoading(false)
-    }
-  };
 
   return (
     <form
