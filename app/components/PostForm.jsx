@@ -219,20 +219,20 @@ export default function PostForm({ onAdd, onSave, isEdit = false, initialData = 
     }
 
     const newPost = {
-      content: finalContent,
-      platforms: ["twitter"],
-      media: [...existingMedia, ...uploadedMedia],
-      scheduledAt: postNow ? new Date().toISOString() : scheduledAt,
-      postNow,
-      recurring,
-      variantUsed: finalContent !== content ? finalContent : null,
-      postFormat: {
-        thread: uploadedThread,
-        carousel: [...existingCarousel, ...uploadedCarousel],
-      },
-      userId: user.uid,
-      status: postNow ? "posted" : "pending",
-    };
+  content: finalContent,
+  platforms,
+  media: [...existingMedia, ...uploadedMedia],
+  scheduledAt: postNow ? new Date().toISOString() : scheduledAt,
+  postNow,
+  recurring,
+  variantUsed: finalContent !== content ? finalContent : null,
+   postFormat: {
+    thread: uploadedThread,
+    carousel: [...existingCarousel, ...uploadedCarousel],
+  },
+  userId: user.uid,
+  status: postNow ? 'posted' : 'pending', // ✅ This is the key addition
+};
 
     const cleanedPost = JSON.parse(JSON.stringify(newPost));
 
