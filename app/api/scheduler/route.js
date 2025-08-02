@@ -1,5 +1,5 @@
 export const runtime = 'nodejs';
-
+import {postScheduledTweets} from "../../functions/scheduledTweetPoster"
 export const config = {
   schedule: '*/1 * * * *', // Every minute
 };
