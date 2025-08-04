@@ -220,7 +220,7 @@ export default function PostForm({ onAdd, onSave, isEdit = false, initialData = 
 
     const newPost = {
   content: finalContent,
-  platforms,
+  platforms: ['twitter'],
   media: [...existingMedia, ...uploadedMedia],
   scheduledAt: postNow ? new Date().toISOString() : scheduledAt,
   postNow,

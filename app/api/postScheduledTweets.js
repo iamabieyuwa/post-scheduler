@@ -1,4 +1,4 @@
-import { postScheduledTweets } from '../../path/to/scheduleTweetPoster.js';
+import { postScheduledTweets } from "../functions/scheduledTweetPoster";
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
