@@ -16,7 +16,7 @@ export default function PageWrapper({ children }) {
       }`}
     >
       {children}
-      // Find the end of your main content in app/components/PageWrapper.jsx
+      
       <footer className="w-full py-10 mt-20 border-t border-gray-800 text-center">
         <p className="text-gray-500 text-sm">
           © {new Date().getFullYear()} PostPilot. Built with ❤️ by
