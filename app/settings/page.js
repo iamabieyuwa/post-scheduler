@@ -25,7 +25,7 @@ export default function SettingsPage() {
 
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
-  
+
   // Change Email State
   const [newEmail, setNewEmail] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
@@ -143,7 +143,6 @@ export default function SettingsPage() {
       const verifier = generateCodeVerifier();
       const challenge = await generateCodeChallenge(verifier);
 
-      // Store verifier for the callback
       localStorage.setItem("twitter_code_verifier", verifier);
       document.cookie = `twitter_code_verifier=${verifier}; path=/; Secure; SameSite=Lax`;
 
@@ -153,8 +152,9 @@ export default function SettingsPage() {
       const params = new URLSearchParams({
         response_type: "code",
         client_id: process.env.NEXT_PUBLIC_TWITTER_CLIENT_ID,
-        // ✅ Uses Environment Variable
-        redirect_uri: process.env.NEXT_PUBLIC_TWITTER_CALLBACK_URL,
+        // ✅ CHANGED TO HTTPS
+        redirect_uri:
+          "https://post-scheduler-pearl.vercel.app/api/twitter/callback",
         scope: "tweet.read tweet.write users.read offline.access",
         state: "secureState123",
         code_challenge: challenge,
@@ -174,7 +174,10 @@ export default function SettingsPage() {
     if (!user) return;
     setEmailLoading(true);
     try {
-      const credential = EmailAuthProvider.credential(user.email, reauthPassword);
+      const credential = EmailAuthProvider.credential(
+        user.email,
+        reauthPassword
+      );
       await reauthenticateWithCredential(user, credential);
       await verifyBeforeUpdateEmail(user, pendingEmail);
       setNewEmail("");
@@ -258,10 +261,18 @@ export default function SettingsPage() {
           <div className="bg-yellow-900/40 border border-yellow-500 text-yellow-300 rounded-lg mb-6 px-4 py-3">
             <strong>Your email is not verified.</strong>
             <div className="mt-2 flex gap-2">
-              <button onClick={handleResendVerification} disabled={verifyLoading} className="px-3 py-1 rounded bg-yellow-500 text-black font-semibold">
+              <button
+                onClick={handleResendVerification}
+                disabled={verifyLoading}
+                className="px-3 py-1 rounded bg-yellow-500 text-black font-semibold"
+              >
                 Resend Email
               </button>
-              <button onClick={handleCheckVerified} disabled={verifyLoading} className="px-3 py-1 rounded bg-gray-700 text-white font-semibold">
+              <button
+                onClick={handleCheckVerified}
+                disabled={verifyLoading}
+                className="px-3 py-1 rounded bg-gray-700 text-white font-semibold"
+              >
                 I&apos;ve Verified
               </button>
             </div>
@@ -269,32 +280,98 @@ export default function SettingsPage() {
         )}
 
         <form className="space-y-5 mb-10" onSubmit={handleChangeEmail}>
-          <h2 className="text-base sm:text-lg font-semibold mb-1 text-gray-200">Change Email</h2>
-          <input type="email" value={currentEmail} disabled className="w-full px-3 py-2 rounded-md bg-gray-900 border border-gray-700 text-gray-400 cursor-not-allowed" />
-          <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} disabled={isAdmin} placeholder="New email" className="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-700 text-white" />
-          <button type="submit" disabled={isAdmin || emailLoading} className="w-full px-4 py-2 rounded-lg font-semibold bg-gray-700 text-white">
-            {emailLoading ? <FaSpinner className="animate-spin inline mr-2" /> : "Update Email"}
+          <h2 className="text-base sm:text-lg font-semibold mb-1 text-gray-200">
+            Change Email
+          </h2>
+          <input
+            type="email"
+            value={currentEmail}
+            disabled
+            className="w-full px-3 py-2 rounded-md bg-gray-900 border border-gray-700 text-gray-400 cursor-not-allowed"
+          />
+          <input
+            type="email"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            disabled={isAdmin}
+            placeholder="New email"
+            className="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-700 text-white"
+          />
+          <button
+            type="submit"
+            disabled={isAdmin || emailLoading}
+            className="w-full px-4 py-2 rounded-lg font-semibold bg-gray-700 text-white"
+          >
+            {emailLoading ? (
+              <FaSpinner className="animate-spin inline mr-2" />
+            ) : (
+              "Update Email"
+            )}
           </button>
         </form>
 
         {showReauth && (
-          <form className="space-y-4 mb-8" onSubmit={handleReauthAndChangeEmail}>
-            <h3 className="text-base font-semibold text-red-400">Re-authenticate</h3>
-            <input type="password" value={reauthPassword} onChange={(e) => setReauthPassword(e.target.value)} placeholder="Your password" className="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-700 text-white" />
+          <form
+            className="space-y-4 mb-8"
+            onSubmit={handleReauthAndChangeEmail}
+          >
+            <h3 className="text-base font-semibold text-red-400">
+              Re-authenticate
+            </h3>
+            <input
+              type="password"
+              value={reauthPassword}
+              onChange={(e) => setReauthPassword(e.target.value)}
+              placeholder="Your password"
+              className="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-700 text-white"
+            />
             <div className="flex gap-2">
-              <button type="submit" className="flex-1 px-4 py-2 rounded-lg bg-blue-700 text-white">Confirm</button>
-              <button type="button" onClick={() => setShowReauth(false)} className="flex-1 px-4 py-2 rounded-lg bg-gray-700 text-white">Cancel</button>
+              <button
+                type="submit"
+                className="flex-1 px-4 py-2 rounded-lg bg-blue-700 text-white"
+              >
+                Confirm
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowReauth(false)}
+                className="flex-1 px-4 py-2 rounded-lg bg-gray-700 text-white"
+              >
+                Cancel
+              </button>
             </div>
           </form>
         )}
 
         {!isAdmin && user?.providerData[0]?.providerId === "password" && (
           <form className="space-y-5" onSubmit={handleChangePassword}>
-            <h2 className="text-base sm:text-lg font-semibold text-gray-200">Change Password</h2>
-            <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="New password" className="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-700 text-white" />
-            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm password" className="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-700 text-white" />
-            <button type="submit" disabled={passLoading} className="w-full px-4 py-2 rounded-lg bg-gray-700 text-white">
-              {passLoading ? <FaSpinner className="animate-spin inline mr-2" /> : "Update Password"}
+            <h2 className="text-base sm:text-lg font-semibold text-gray-200">
+              Change Password
+            </h2>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="New password"
+              className="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-700 text-white"
+            />
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirm password"
+              className="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-700 text-white"
+            />
+            <button
+              type="submit"
+              disabled={passLoading}
+              className="w-full px-4 py-2 rounded-lg bg-gray-700 text-white"
+            >
+              {passLoading ? (
+                <FaSpinner className="animate-spin inline mr-2" />
+              ) : (
+                "Update Password"
+              )}
             </button>
           </form>
         )}
@@ -306,20 +383,42 @@ export default function SettingsPage() {
           {twitterProfile ? (
             <div className="bg-gray-900 rounded-lg p-4 border border-gray-700 flex items-center justify-between">
               <div>
-                <div className="text-sm sm:text-base font-medium text-white">@{twitterProfile.username}</div>
-                <div className="text-xs text-gray-400">{twitterProfile.name}</div>
+                <div className="text-sm sm:text-base font-medium text-white">
+                  @{twitterProfile.username}
+                </div>
+                <div className="text-xs text-gray-400">
+                  {twitterProfile.name}
+                </div>
               </div>
-              <button onClick={() => setShowDisconnectModal(true)} className="px-3 py-1.5 rounded bg-red-600 text-white text-sm font-semibold">Disconnect</button>
+              <button
+                onClick={() => setShowDisconnectModal(true)}
+                className="px-3 py-1.5 rounded bg-red-600 text-white text-sm font-semibold"
+              >
+                Disconnect
+              </button>
             </div>
           ) : (
-            <button onClick={handleConnectTwitter} disabled={connectingTwitter} className="mt-4 flex items-center gap-2 px-4 py-2 rounded bg-white text-black font-semibold">
-              {connectingTwitter ? <FaSpinner className="animate-spin" /> : <FaXTwitter />}
+            <button
+              onClick={handleConnectTwitter}
+              disabled={connectingTwitter}
+              className="mt-4 flex items-center gap-2 px-4 py-2 rounded bg-white text-black font-semibold"
+            >
+              {connectingTwitter ? (
+                <FaSpinner className="animate-spin" />
+              ) : (
+                <FaXTwitter />
+              )}
               {connectingTwitter ? "Connecting..." : "Connect X"}
             </button>
           )}
         </div>
       </div>
-      <ConfirmDisconnectModal isOpen={showDisconnectModal} onClose={() => setShowDisconnectModal(false)} onConfirm={handleDisconnectTwitter} isDisconnecting={isDisconnecting} />
+      <ConfirmDisconnectModal
+        isOpen={showDisconnectModal}
+        onClose={() => setShowDisconnectModal(false)}
+        onConfirm={handleDisconnectTwitter}
+        isDisconnecting={isDisconnecting}
+      />
     </div>
   );
 }
