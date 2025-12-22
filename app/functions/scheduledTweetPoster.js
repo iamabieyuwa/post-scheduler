@@ -23,9 +23,8 @@ export async function postScheduledTweets() {
 
   const snapshot = await db
     .collection('posts')
-    .where('postNow', '==', false)
-    .where('scheduledAt', '<=', now.toISOString())
-    .where('status', '==', 'pending')
+    .where('status', '==', 'pending') // ✅ Only check for pending status
+    .where('scheduledAt', '<=', now.toISOString()) // ✅ Time has arrived
     .get();
 
   if (snapshot.empty) {

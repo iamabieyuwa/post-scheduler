@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { FaInstagram, FaXTwitter } from "react-icons/fa6";
 import { FaSpinner, FaCheckCircle } from "react-icons/fa";
 import { generateCodeVerifier, generateCodeChallenge } from "./../utils/pkce";
@@ -18,6 +18,7 @@ export default function ConnectAccountsPage() {
   const [connecting, setConnecting] = useState({ twitter: false });
   const [twitterUsername, setTwitterUsername] = useState("");
 
+  // Check auth and connection status on mount
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (!u) {
@@ -26,16 +27,20 @@ export default function ConnectAccountsPage() {
         setUser(u);
         const userDocRef = doc(db, "users", u.uid);
         const userSnap = await getDoc(userDocRef);
+        
         if (userSnap.exists()) {
           const data = userSnap.data();
-          const isTwitterConnected = data.connectedAccounts?.twitter === true;
+          const isTwitterConnected = !!(data.connectedAccounts?.twitter);
           setConnected({ twitter: isTwitterConnected });
+
           if (isTwitterConnected) {
             setTwitterUsername(data.twitterProfile?.username || "");
-            toast.success(`Connected to @${data.twitterProfile?.username}`);
-            setTimeout(() => {
-              router.push("/dashboard");
-            }, 3000);
+            // Only toast if we just came back from a successful connection
+            if (window.location.search.includes("success=twitter_connected")) {
+              toast.success(`Connected to @${data.twitterProfile?.username}`);
+            }
+            // Auto-redirect to dashboard if already connected
+            setTimeout(() => router.push("/dashboard"), 2000);
           }
         }
         setChecking(false);
@@ -44,69 +49,36 @@ export default function ConnectAccountsPage() {
     return () => unsub();
   }, [router]);
 
+  // Handle URL params like "disconnected"
   useEffect(() => {
-  const urlParams = new URLSearchParams(window.location.search);
-  const disconnected = urlParams.get("disconnected");
-
-  if (disconnected === "twitter") {
-    toast.success("Disconnected from Twitter");
-    const cleanUrl = window.location.origin + window.location.pathname;
-    window.history.replaceState({}, document.title, cleanUrl);
-  }
-}, []);
-
-useEffect(() => {
-  const unsub = onAuthStateChanged(auth, async (u) => {
-    if (!u) {
-      router.push("/");
-    } else {
-      setUser(u);
-      const userDocRef = doc(db, "users", u.uid);
-      const userSnap = await getDoc(userDocRef);
-      if (userSnap.exists()) {
-        const data = userSnap.data();
-        const isTwitterConnected = !!(data.connectedAccounts && data.connectedAccounts.twitter);
-        setConnected({ twitter: isTwitterConnected });
-
-        if (isTwitterConnected) {
-          setTwitterUsername(data.twitterProfile?.username || "");
-          toast.success(`Connected to @${data.twitterProfile?.username}`);
-          setTimeout(() => router.push("/dashboard"), 3000);
-        }
-      }
-      setChecking(false);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("disconnected") === "twitter") {
+      toast.success("Disconnected from Twitter.");
+      // Clean URL
+      router.replace("/connect");
     }
-  });
-  return () => unsub();
-}, [router]);
-
-
-useEffect(() => {
-  const params = new URLSearchParams(window.location.search);
-  const disconnected = params.get("disconnected");
-
-  if (disconnected === "twitter") {
-    toast.success("Disconnected from Twitter.");
-  }
-}, []);
-
+  }, [router]);
 
   const handleConnectTwitter = async () => {
     setConnecting((c) => ({ ...c, twitter: true }));
     try {
       const verifier = generateCodeVerifier();
       const challenge = await generateCodeChallenge(verifier);
+      
+      // ✅ Security: Use Secure and SameSite flags for cookies
       localStorage.setItem("twitter_code_verifier", verifier);
-      document.cookie = `twitter_code_verifier=${verifier}; path=/`;
+      document.cookie = `twitter_code_verifier=${verifier}; path=/; Secure; SameSite=Lax`;
+      
       const token = await user.getIdToken();
-      document.cookie = `firebase_token=${token}; path=/`;
+      document.cookie = `firebase_token=${token}; path=/; Secure; SameSite=Lax`;
 
       const params = new URLSearchParams({
         response_type: "code",
         client_id: process.env.NEXT_PUBLIC_TWITTER_CLIENT_ID,
-        redirect_uri: "http://post-scheduler-pearl.vercel.app/api/twitter/callback",
+        // ✅ Use the environment variable for consistency
+        redirect_uri: process.env.NEXT_PUBLIC_TWITTER_CALLBACK_URL,
         scope: "tweet.read tweet.write users.read offline.access",
-        state: "secureState123",
+        state: "secureState123", 
         code_challenge: challenge,
         code_challenge_method: "S256",
       });
@@ -114,7 +86,7 @@ useEffect(() => {
       window.location.href = `https://twitter.com/i/oauth2/authorize?${params.toString()}`;
     } catch (err) {
       console.error("Twitter PKCE error", err);
-      alert("Failed to initiate Twitter connection.");
+      toast.error("Failed to initiate Twitter connection.");
       setConnecting((c) => ({ ...c, twitter: false }));
     }
   };
@@ -137,7 +109,6 @@ useEffect(() => {
       </div>
 
       <div className="grid sm:grid-cols-2 gap-6 w-full max-w-xl">
-        {/* Twitter/X */}
         <div className="bg-[#121212] rounded-xl p-6 border border-gray-700 shadow hover:shadow-blue-500/10 transition-all">
           <div className="flex items-center gap-4">
             <div className="bg-white rounded-full p-3">
@@ -148,18 +119,18 @@ useEffect(() => {
               <p className="text-sm text-gray-400">Post to your X timeline.</p>
             </div>
           </div>
-{connected.twitter ? (
-  <div className="mt-6">
-    <p className="text-sm text-green-400 mb-1">
-      Connected as <span className="font-semibold">@{twitterUsername}</span>
-    </p>
-    <button
-      disabled
-      className="w-full py-2 bg-green-500 text-white font-semibold rounded flex items-center justify-center gap-2"
-    >
-      <FaCheckCircle className="text-white" /> Connected!
-    </button>
-  </div>
+          {connected.twitter ? (
+            <div className="mt-6">
+              <p className="text-sm text-green-400 mb-1">
+                Connected as <span className="font-semibold">@{twitterUsername}</span>
+              </p>
+              <button
+                disabled
+                className="w-full py-2 bg-green-500 text-white font-semibold rounded flex items-center justify-center gap-2"
+              >
+                <FaCheckCircle className="text-white" /> Connected!
+              </button>
+            </div>
           ) : (
             <button
               onClick={handleConnectTwitter}
@@ -172,7 +143,6 @@ useEffect(() => {
           )}
         </div>
 
-        {/* Instagram - disabled for now */}
         <div className="bg-[#121212] rounded-xl p-6 border border-gray-700 opacity-50 cursor-not-allowed">
           <div className="flex items-center gap-4">
             <div className="bg-gradient-to-br from-pink-500 to-yellow-400 rounded-full p-3">

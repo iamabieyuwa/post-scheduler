@@ -4,9 +4,13 @@ import NavbarWrapper from "./components/NavbarWrapper";
 import PageWrapper from './components/PageWrapper';
 import { AuthProvider } from "./context/AuthContext";
 import { Inter } from "next/font/google";
+// app/layout.js
 export const metadata = {
-  title: "PostPilot",
-  description: "Schedule your posts with ease.",
+  title: "PostPilot | Built by Abieyuwa Imina",
+  description: "A professional X (Twitter) post scheduler and automation tool built by Abieyuwa Imina.",
+  authors: [{ name: "Abieyuwa Imina" }],
+  keywords: ["X scheduler", "Twitter automation", "Abieyuwa Imina", "PostPilot"],
+  creator: "Abieyuwa Imina",
 };
 
 export default function RootLayout({ children }) {
