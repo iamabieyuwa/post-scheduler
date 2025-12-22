@@ -23,12 +23,12 @@ export async function postScheduledTweets() {
 
   const snapshot = await db
     .collection('posts')
-    .where('status', '==', 'pending') // ✅ Only check for pending status
-    .where('scheduledAt', '<=', now.toISOString()) // ✅ Time has arrived
+    .where('status', '==', 'pending') 
+    .where('scheduledAt', '<=', now.toISOString()) 
     .get();
 
   if (snapshot.empty) {
-    console.log('⏳ No scheduled tweets to post.');
+    console.log('⏳ No tweets to post.');
     return;
   }
 
