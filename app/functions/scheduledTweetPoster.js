@@ -1,5 +1,5 @@
 import * as dotenv from 'dotenv';
-import { initFirebaseAdmin } from '../lib/firebaseAdmin.js';
+import { initFirebaseAdmin } from '../lib/firebase-admin.js';
 import { getValidTwitterAccessToken } from '../lib/twitter.js';
 import { uploadMediaToTwitter } from '../utils/uploadMediaToTwitter.js';
 
