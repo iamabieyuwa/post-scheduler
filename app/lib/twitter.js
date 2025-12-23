@@ -1,23 +1,14 @@
-// lib/twitter.js
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, doc, getDoc, setDoc } from "firebase-admin/firestore";
-import { initializeApp, cert, getApps } from "firebase-admin/app";
+import { initFirebaseAdmin } from "./firebaseAdmin.js";
 
-// Firebase Admin setup
-if (!getApps().length) {
-  initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-    }),
-  });
+// don't initialize at module import — call init at runtime
+function getDb() {
+  return initFirebaseAdmin();
 }
 
-const db = getFirestore();
-
-// 🔁 Refresh token if expired
 export async function getValidTwitterAccessToken(uid) {
+  const db = getDb();
   const userDocRef = doc(db, "users", uid);
   const userSnap = await getDoc(userDocRef);
   if (!userSnap.exists()) throw new Error("User not found");
@@ -52,7 +43,7 @@ export async function getValidTwitterAccessToken(uid) {
     {
       twitterTokens: {
         access_token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token ?? tokens.refresh_token, // may not return new one
+        refresh_token: tokenData.refresh_token ?? tokens.refresh_token,
         expires_in: tokenData.expires_in,
       },
     },

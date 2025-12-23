@@ -1,32 +1,20 @@
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
 import * as dotenv from 'dotenv';
-// <-- Use the actual helper exported by the repo
+import { initFirebaseAdmin } from '../lib/firebaseAdmin.js';
 import { getValidTwitterAccessToken } from '../lib/twitter.js';
-import { uploadMediaToTwitter } from '../utils/uploadMediaToTwitter.js'; // <-- helper required
+import { uploadMediaToTwitter } from '../utils/uploadMediaToTwitter.js';
 
 dotenv.config();
 
-if (!getApps().length) {
-  initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-    }),
-  });
-}
-
-const db = getFirestore();
-
 export async function postScheduledTweets() {
+  // initialize Firestore at runtime (avoids build-time errors)
+  const db = initFirebaseAdmin();
+
   const now = new Date();
 
   const snapshot = await db
     .collection('posts')
-    // ✅ REMOVED: .where('postNow', '==', false)
-    .where('status', '==', 'pending') // Only look for things not yet sent
-    .where('scheduledAt', '<=', now.toISOString()) // Whose time has arrived
+    .where('status', '==', 'pending')
+    .where('scheduledAt', '<=', now.toISOString())
     .get();
 
   if (snapshot.empty) {
@@ -47,7 +35,6 @@ export async function postScheduledTweets() {
         throw new Error('Missing Twitter tokens');
       }
 
-      // <-- call the correctly named helper
       const accessToken = await getValidTwitterAccessToken(post.userId);
 
       const media = Array.isArray(post.media) ? post.media : [];

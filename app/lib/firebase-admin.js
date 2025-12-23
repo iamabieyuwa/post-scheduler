@@ -1,39 +1,24 @@
-import admin from "firebase-admin";
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
-if (!admin.apps.length) {
-  const rawKey = process.env.FIREBASE_PRIVATE_KEY;
-
-  // 🛡️ CRITICAL: If there is no key (like during some build steps), 
-  // just log a warning instead of crashing the whole deployment.
-  if (!rawKey || rawKey === "undefined") {
-    console.warn("⚠️ FIREBASE_PRIVATE_KEY is not set. Skipping Admin init for now.");
-  } else {
-    try {
-      // 🔓 Decode Base64 if it's encoded
-      const isBase64 = !rawKey.includes("-----BEGIN PRIVATE KEY-----");
-      const decodedKey = isBase64 
-        ? Buffer.from(rawKey, 'base64').toString('utf8') 
-        : rawKey;
-
-      // 🛠️ Ensure newlines are correct
-      const finalKey = decodedKey.replace(/\\n/g, '\n');
-
-      admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: finalKey,
-        }),
-      });
-      console.log("✅ Firebase Admin Initialized");
-    } catch (error) {
-      console.error("❌ Firebase Initialization Error:", error.message);
-      // Only throw the error if we are NOT in the build process
-      if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
-         throw error;
-      }
+export function initFirebaseAdmin() {
+  // only initialize once
+  if (!getApps().length) {
+    if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
+      throw new Error('Missing Firebase admin environment variables (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY).');
     }
-  }
-}
 
-export const adminDb = admin.firestore();
+    // Convert escaped newlines to real newlines. Accepts either \n sequences or real newlines.
+    const key = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n').trim();
+
+    initializeApp({
+      credential: cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: key,
+      }),
+    });
+  }
+
+  return getFirestore();
+}
