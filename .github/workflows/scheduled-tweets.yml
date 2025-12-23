@@ -1,34 +1,15 @@
-name: Scheduled Tweets Poster
+name: Trigger PostPilot Scheduler
 
 on:
   schedule:
-    - cron: "*/5 * * * *" # every 5 minutes
-  workflow_dispatch:
+    - cron: "*/5 * * * *" # Runs every 5 minutes
+  workflow_dispatch: # Allows you to run it manually from the GitHub UI
 
 jobs:
-  run-scheduler:
+  ping-vercel:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run scheduled tweet poster
-        run: node .github/actions/postScheduledTweets.js
-        env:
-          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
-          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
-          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
-          TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
-          TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
-          TWITTER_CLIENT_ID: ${{ secrets.TWITTER_CLIENT_ID }}
-          TWITTER_CLIENT_SECRET: ${{ secrets.TWITTER_CLIENT_SECRET }}
-          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
-          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
-          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+      - name: Ping PostPilot API
+        run: |
+          curl -X GET "https://post-scheduler-pearl.vercel.app/api/scheduler" \
+          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
