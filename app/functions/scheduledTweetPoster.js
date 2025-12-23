@@ -1,7 +1,8 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import * as dotenv from 'dotenv';
-import { getValidTwitterToken } from '../utils/getValidTwitterAccessToken.js';
+// <-- Use the actual helper exported by the repo
+import { getValidTwitterAccessToken } from '../lib/twitter.js';
 import { uploadMediaToTwitter } from '../utils/uploadMediaToTwitter.js'; // <-- helper required
 
 dotenv.config();
@@ -46,7 +47,8 @@ export async function postScheduledTweets() {
         throw new Error('Missing Twitter tokens');
       }
 
-      const accessToken = await getValidTwitterToken(post.userId);
+      // <-- call the correctly named helper
+      const accessToken = await getValidTwitterAccessToken(post.userId);
 
       const media = Array.isArray(post.media) ? post.media : [];
       const mediaIds = [];
