@@ -1,16 +1,19 @@
+// app/api/scheduler/route.js
+import { postScheduledTweets } from "../../functions/scheduledTweetPoster.js"
 
 export async function GET(req) {
-  const authHeader = req.headers.get('authorization');
-  
-  // This MUST match the CRON_SECRET you saved in Vercel
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return new Response('Unauthorized', { status: 401 });
-  }
-
   try {
+    const authHeader = req.headers.get('authorization');
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    // Now this function will be recognized!
     await postScheduledTweets(); 
-    return new Response("✅ Posts Processed", { status: 200 });
+    
+    return new Response(JSON.stringify({ message: "Success" }), { status: 200 });
   } catch (err) {
-    return new Response(`Error: ${err.message}`, { status: 500 });
+    console.error("SCHEDULER_CRASH:", err.message);
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
   }
 }
