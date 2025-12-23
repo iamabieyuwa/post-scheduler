@@ -1,7 +1,6 @@
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase-admin/firestore';
-import { initFirebaseAdmin } from './firebaseAdmin.js';
-
+import { initFirebaseAdmin } from './firebase-admin';
 // don't initialize at module import — call init at runtime
 function getDb() {
   return initFirebaseAdmin();
