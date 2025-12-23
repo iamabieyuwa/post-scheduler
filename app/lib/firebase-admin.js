@@ -1,20 +1,21 @@
-// app/lib/firebase-admin.js
 import admin from "firebase-admin";
 
 if (!admin.apps.length) {
-  try {
-    const rawKey = process.env.FIREBASE_PRIVATE_KEY;
+  const rawKey = process.env.FIREBASE_PRIVATE_KEY;
 
-    if (!rawKey) {
-      console.warn("⚠️ FIREBASE_PRIVATE_KEY is missing. Skipping initialization for build.");
-    } else {
-      // 🔓 Decode Base64 if it doesn't look like a standard PEM key
+  // 🛡️ CRITICAL: If there is no key (like during some build steps), 
+  // just log a warning instead of crashing the whole deployment.
+  if (!rawKey || rawKey === "undefined") {
+    console.warn("⚠️ FIREBASE_PRIVATE_KEY is not set. Skipping Admin init for now.");
+  } else {
+    try {
+      // 🔓 Decode Base64 if it's encoded
       const isBase64 = !rawKey.includes("-----BEGIN PRIVATE KEY-----");
       const decodedKey = isBase64 
         ? Buffer.from(rawKey, 'base64').toString('utf8') 
         : rawKey;
 
-      // 🛠️ Ensure newlines are correctly handled (\n vs actual new lines)
+      // 🛠️ Ensure newlines are correct
       const finalKey = decodedKey.replace(/\\n/g, '\n');
 
       admin.initializeApp({
@@ -24,13 +25,13 @@ if (!admin.apps.length) {
           privateKey: finalKey,
         }),
       });
-      console.log("✅ Firebase Admin Initialized Successfully");
-    }
-  } catch (error) {
-    console.error("❌ Firebase Admin Initialization Error:", error.message);
-    // During build, we prevent a hard crash so the deploy can finish
-    if (process.env.NODE_ENV === 'production' && !process.env.VERCEL_ENV) {
-      throw error;
+      console.log("✅ Firebase Admin Initialized");
+    } catch (error) {
+      console.error("❌ Firebase Initialization Error:", error.message);
+      // Only throw the error if we are NOT in the build process
+      if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
+         throw error;
+      }
     }
   }
 }
