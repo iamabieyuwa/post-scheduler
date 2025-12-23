@@ -23,12 +23,13 @@ export async function postScheduledTweets() {
 
   const snapshot = await db
     .collection('posts')
-    .where('status', '==', 'pending') 
-    .where('scheduledAt', '<=', now.toISOString()) 
+    // ✅ REMOVED: .where('postNow', '==', false)
+    .where('status', '==', 'pending') // Only look for things not yet sent
+    .where('scheduledAt', '<=', now.toISOString()) // Whose time has arrived
     .get();
 
   if (snapshot.empty) {
-    console.log('⏳ No tweets to post.');
+    console.log('⏳ No pending tweets to post.');
     return;
   }
 
