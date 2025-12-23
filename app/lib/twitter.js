@@ -1,6 +1,6 @@
-import { getAuth } from "firebase-admin/auth";
-import { getFirestore, doc, getDoc, setDoc } from "firebase-admin/firestore";
-import { initFirebaseAdmin } from "./firebaseAdmin.js";
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore, doc, getDoc, setDoc } from 'firebase-admin/firestore';
+import { initFirebaseAdmin } from './firebaseAdmin.js';
 
 // don't initialize at module import — call init at runtime
 function getDb() {
@@ -9,24 +9,24 @@ function getDb() {
 
 export async function getValidTwitterAccessToken(uid) {
   const db = getDb();
-  const userDocRef = doc(db, "users", uid);
+  const userDocRef = doc(db, 'users', uid);
   const userSnap = await getDoc(userDocRef);
-  if (!userSnap.exists()) throw new Error("User not found");
+  if (!userSnap.exists()) throw new Error('User not found');
 
   const userData = userSnap.data();
   const tokens = userData.twitterTokens;
-  if (!tokens?.refresh_token) throw new Error("No refresh token found");
+  if (!tokens?.refresh_token) throw new Error('No refresh token found');
 
-  const tokenRes = await fetch("https://api.twitter.com/2/oauth2/token", {
-    method: "POST",
+  const tokenRes = await fetch('https://api.twitter.com/2/oauth2/token', {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
+      'Content-Type': 'application/x-www-form-urlencoded',
       Authorization: `Basic ${Buffer.from(
         `${process.env.TWITTER_CLIENT_ID}:${process.env.TWITTER_CLIENT_SECRET}`
-      ).toString("base64")}`,
+      ).toString('base64')}`,
     },
     body: new URLSearchParams({
-      grant_type: "refresh_token",
+      grant_type: 'refresh_token',
       refresh_token: tokens.refresh_token,
       client_id: process.env.TWITTER_CLIENT_ID,
     }),
@@ -34,10 +34,10 @@ export async function getValidTwitterAccessToken(uid) {
 
   const tokenData = await tokenRes.json();
   if (!tokenData.access_token) {
-    throw new Error("Failed to refresh Twitter token");
+    throw new Error('Failed to refresh Twitter token');
   }
 
-  // 💾 Save updated token
+  // Save updated token
   await setDoc(
     userDocRef,
     {
