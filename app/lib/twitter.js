@@ -1,6 +1,7 @@
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, doc, getDoc, setDoc } from 'firebase-admin/firestore';
+import { getFirestore } from 'firebase-admin/firestore'; // ✅ Removed doc, getDoc, setDoc
 import { initFirebaseAdmin } from './firebase-admin';
+
 // don't initialize at module import — call init at runtime
 function getDb() {
   return initFirebaseAdmin();
@@ -8,9 +9,15 @@ function getDb() {
 
 export async function getValidTwitterAccessToken(uid) {
   const db = getDb();
-  const userDocRef = doc(db, 'users', uid);
-  const userSnap = await getDoc(userDocRef);
-  if (!userSnap.exists()) throw new Error('User not found');
+  
+  // 🛡️ Safety Check for build-time
+  if (!db) return null;
+
+  // ✅ Switched to Admin syntax: db.collection().doc()
+  const userDocRef = db.collection('users').doc(uid);
+  const userSnap = await userDocRef.get();
+  
+  if (!userSnap.exists) throw new Error('User not found');
 
   const userData = userSnap.data();
   const tokens = userData.twitterTokens;
@@ -36,9 +43,8 @@ export async function getValidTwitterAccessToken(uid) {
     throw new Error('Failed to refresh Twitter token');
   }
 
-  // Save updated token
-  await setDoc(
-    userDocRef,
+  // ✅ Switched to Admin syntax: .set() with merge
+  await userDocRef.set(
     {
       twitterTokens: {
         access_token: tokenData.access_token,

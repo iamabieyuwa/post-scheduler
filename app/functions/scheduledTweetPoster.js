@@ -6,11 +6,18 @@ import { uploadMediaToTwitter } from '../utils/uploadMediaToTwitter.js';
 dotenv.config();
 
 export async function postScheduledTweets() {
-  // initialize Firestore at runtime (avoids build-time errors)
+  // ✅ 1. Get the database instance
   const db = initFirebaseAdmin();
+
+  // 🛡️ 2. Safety Check: If db is null (happens during Vercel build phase), exit early
+  if (!db) {
+    console.log("⚠️ Database not initialized (likely build phase). Skipping.");
+    return;
+  }
 
   const now = new Date();
 
+  // Your existing query logic
   const snapshot = await db
     .collection('posts')
     .where('status', '==', 'pending')
@@ -116,6 +123,7 @@ export async function postScheduledTweets() {
         firstTweetId = result.data?.id;
       }
 
+      // ✅ 3. Ensure we use the Admin-safe update method (your syntax here was already good)
       await db.collection('posts').doc(postId).update({
         status: 'posted',
         twitterId: firstTweetId || null,
@@ -125,6 +133,8 @@ export async function postScheduledTweets() {
       console.log(`✅ Posted: ${postId}`);
     } catch (err) {
       console.error(`❌ Failed to post ${postId}:`, err.message);
+      
+      // ✅ Same safety here
       await db.collection('posts').doc(postId).update({
         status: 'failed',
         error: err.message,
