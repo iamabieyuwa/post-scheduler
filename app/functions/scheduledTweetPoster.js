@@ -1,31 +1,24 @@
-import * as dotenv from "dotenv";
-import { initFirebaseAdmin } from "../lib/firebase-admin.js";
-import { getValidTwitterAccessToken } from "../lib/twitter.js";
-import { uploadMediaToTwitter } from "../utils/uploadMediaToTwitter.js";
+import * as dotenv from 'dotenv';
+import { initFirebaseAdmin } from '../lib/firebase-admin.js';
+import { getValidTwitterAccessToken } from '../lib/twitter.js';
+import { uploadMediaToTwitter } from '../utils/uploadMediaToTwitter.js';
 
 dotenv.config();
 
 export async function postScheduledTweets() {
-  // ✅ 1. Get the database instance
   const db = initFirebaseAdmin();
-
-  // 🛡️ 2. Safety Check: If db is null (happens during Vercel build phase), exit early
-  if (!db) {
-    console.log("⚠️ Database not initialized (likely build phase). Skipping.");
-    return;
-  }
+  if (!db) return;
 
   const now = new Date();
 
-  // Your existing query logic
   const snapshot = await db
-    .collection("posts")
-    .where("status", "==", "pending")
-    .where("scheduledAt", "<=", now.toISOString())
+    .collection('posts')
+    .where('status', '==', 'pending')
+    .where('scheduledAt', '<=', now.toISOString())
     .get();
 
   if (snapshot.empty) {
-    console.log("⏳ No pending tweets to post.");
+    console.log('⏳ No pending tweets to post.');
     return;
   }
 
@@ -34,118 +27,93 @@ export async function postScheduledTweets() {
     const postId = doc.id;
 
     try {
-      const userDoc = await db.collection("users").doc(post.userId).get();
-      const userData = userDoc.data();
-      const tokens = userData?.twitterTokens;
-
-      if (!tokens?.access_token || !tokens?.refresh_token) {
-        throw new Error("Missing Twitter tokens");
-      }
-
       const accessToken = await getValidTwitterAccessToken(post.userId);
+      if (!accessToken) throw new Error("Could not refresh Twitter token");
 
+      // 1. Process Main Media (Cloudinary URLs)
       const media = Array.isArray(post.media) ? post.media : [];
-      const mediaIds = [];
+      const mainMediaIds = [];
 
       for (const file of media) {
-        const mediaId = await uploadMediaToTwitter(file.url, accessToken);
-        if (mediaId) mediaIds.push(mediaId);
+        // file.url comes from your Cloudinary DB structure
+        const twitterMediaId = await uploadMediaToTwitter(file.url, accessToken);
+        if (twitterMediaId) mainMediaIds.push(twitterMediaId);
       }
 
       const thread = post.postFormat?.thread || [];
       const isThread = thread.length > 0;
-
       let firstTweetId = null;
 
       if (isThread) {
+        // --- THREAD LOGIC ---
         for (let i = 0; i < thread.length; i++) {
           const block = thread[i];
-          const tweetData = {
-            text: block.text || "",
-          };
+          const tweetData = { text: block.text || '' };
 
+          // Handle media inside thread blocks
           if (block.images?.length) {
             const blockMediaIds = [];
             for (const imgUrl of block.images) {
-              const mediaId = await uploadMediaToTwitter(imgUrl, accessToken);
-              if (mediaId) blockMediaIds.push(mediaId);
+              const mId = await uploadMediaToTwitter(imgUrl, accessToken);
+              if (mId) blockMediaIds.push(mId);
             }
-            if (blockMediaIds.length > 0) {
-              tweetData.media = { media_ids: blockMediaIds };
-            }
+            if (blockMediaIds.length > 0) tweetData.media = { media_ids: blockMediaIds };
+          } 
+          // If it's the first tweet of a thread, attach the main media
+          else if (i === 0 && mainMediaIds.length > 0) {
+            tweetData.media = { media_ids: mainMediaIds };
           }
 
-          const response = await fetch("https://api.twitter.com/2/tweets", {
-            method: "POST",
+          const response = await fetch('https://api.twitter.com/2/tweets', {
+            method: 'POST',
             headers: {
               Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
+              'Content-Type': 'application/json',
             },
             body: JSON.stringify(
-              i === 0
-                ? tweetData
-                : {
-                    ...tweetData,
-                    reply: { in_reply_to_tweet_id: firstTweetId },
-                  }
+              i === 0 ? tweetData : { ...tweetData, reply: { in_reply_to_tweet_id: firstTweetId } }
             ),
           });
 
           const result = await response.json();
-          if (!response.ok) {
-            throw new Error(`Twitter API error: ${JSON.stringify(result)}`);
-          }
-
-          if (i === 0) {
-            firstTweetId = result.data?.id;
-          }
+          if (!response.ok) throw new Error(`Twitter Thread Error: ${JSON.stringify(result)}`);
+          if (i === 0) firstTweetId = result.data?.id;
         }
       } else {
-        const payload = {
-          text: post.content || "",
-          media: {
-            media_ids: [mediaId], // Must be an array of strings inside an object
-          },
-        };
-
-        if (mediaIds.length > 0) {
-          payload.media = { media_ids: mediaIds };
+        // --- SINGLE TWEET LOGIC ---
+        const payload = { text: post.content || '' };
+        if (mainMediaIds.length > 0) {
+          payload.media = { media_ids: mainMediaIds };
         }
 
-        const res = await fetch("https://api.twitter.com/2/tweets", {
-          method: "POST",
+        const res = await fetch('https://api.twitter.com/2/tweets', {
+          method: 'POST',
           headers: {
             Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify(payload),
         });
 
         const result = await res.json();
-        if (!res.ok) {
-          throw new Error(`Twitter API error: ${JSON.stringify(result)}`);
-        }
-
+        if (!res.ok) throw new Error(`Twitter API Error: ${JSON.stringify(result)}`);
         firstTweetId = result.data?.id;
       }
 
-      // ✅ 3. Ensure we use the Admin-safe update method (your syntax here was already good)
-      await db
-        .collection("posts")
-        .doc(postId)
-        .update({
-          status: "posted",
-          twitterId: firstTweetId || null,
-          postedAt: new Date().toISOString(),
-        });
+      // Success Update
+      await db.collection('posts').doc(postId).update({
+        status: 'posted',
+        twitterId: firstTweetId || null,
+        postedAt: new Date().toISOString(),
+        error: null // Clear previous errors
+      });
 
-      console.log(`✅ Posted: ${postId}`);
+      console.log(`✅ Successfully posted: ${postId}`);
+
     } catch (err) {
       console.error(`❌ Failed to post ${postId}:`, err.message);
-
-      // ✅ Same safety here
-      await db.collection("posts").doc(postId).update({
-        status: "failed",
+      await db.collection('posts').doc(postId).update({
+        status: 'failed',
         error: err.message,
         failedAt: new Date().toISOString(),
       });
