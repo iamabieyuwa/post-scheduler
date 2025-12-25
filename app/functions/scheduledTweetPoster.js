@@ -1,7 +1,7 @@
-import * as dotenv from 'dotenv';
-import { initFirebaseAdmin } from '../lib/firebase-admin.js';
-import { getValidTwitterAccessToken } from '../lib/twitter.js';
-import { uploadMediaToTwitter } from '../utils/uploadMediaToTwitter.js';
+import * as dotenv from "dotenv";
+import { initFirebaseAdmin } from "../lib/firebase-admin.js";
+import { getValidTwitterAccessToken } from "../lib/twitter.js";
+import { uploadMediaToTwitter } from "../utils/uploadMediaToTwitter.js";
 
 dotenv.config();
 
@@ -19,13 +19,13 @@ export async function postScheduledTweets() {
 
   // Your existing query logic
   const snapshot = await db
-    .collection('posts')
-    .where('status', '==', 'pending')
-    .where('scheduledAt', '<=', now.toISOString())
+    .collection("posts")
+    .where("status", "==", "pending")
+    .where("scheduledAt", "<=", now.toISOString())
     .get();
 
   if (snapshot.empty) {
-    console.log('⏳ No pending tweets to post.');
+    console.log("⏳ No pending tweets to post.");
     return;
   }
 
@@ -34,12 +34,12 @@ export async function postScheduledTweets() {
     const postId = doc.id;
 
     try {
-      const userDoc = await db.collection('users').doc(post.userId).get();
+      const userDoc = await db.collection("users").doc(post.userId).get();
       const userData = userDoc.data();
       const tokens = userData?.twitterTokens;
 
       if (!tokens?.access_token || !tokens?.refresh_token) {
-        throw new Error('Missing Twitter tokens');
+        throw new Error("Missing Twitter tokens");
       }
 
       const accessToken = await getValidTwitterAccessToken(post.userId);
@@ -61,7 +61,7 @@ export async function postScheduledTweets() {
         for (let i = 0; i < thread.length; i++) {
           const block = thread[i];
           const tweetData = {
-            text: block.text || '',
+            text: block.text || "",
           };
 
           if (block.images?.length) {
@@ -75,16 +75,19 @@ export async function postScheduledTweets() {
             }
           }
 
-          const response = await fetch('https://api.twitter.com/2/tweets', {
-            method: 'POST',
+          const response = await fetch("https://api.twitter.com/2/tweets", {
+            method: "POST",
             headers: {
               Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
             },
             body: JSON.stringify(
               i === 0
                 ? tweetData
-                : { ...tweetData, reply: { in_reply_to_tweet_id: firstTweetId } }
+                : {
+                    ...tweetData,
+                    reply: { in_reply_to_tweet_id: firstTweetId },
+                  }
             ),
           });
 
@@ -99,18 +102,21 @@ export async function postScheduledTweets() {
         }
       } else {
         const payload = {
-          text: post.content || '',
+          text: post.content || "",
+          media: {
+            media_ids: [mediaId], // Must be an array of strings inside an object
+          },
         };
 
         if (mediaIds.length > 0) {
           payload.media = { media_ids: mediaIds };
         }
 
-        const res = await fetch('https://api.twitter.com/2/tweets', {
-          method: 'POST',
+        const res = await fetch("https://api.twitter.com/2/tweets", {
+          method: "POST",
           headers: {
             Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
           body: JSON.stringify(payload),
         });
@@ -124,19 +130,22 @@ export async function postScheduledTweets() {
       }
 
       // ✅ 3. Ensure we use the Admin-safe update method (your syntax here was already good)
-      await db.collection('posts').doc(postId).update({
-        status: 'posted',
-        twitterId: firstTweetId || null,
-        postedAt: new Date().toISOString(),
-      });
+      await db
+        .collection("posts")
+        .doc(postId)
+        .update({
+          status: "posted",
+          twitterId: firstTweetId || null,
+          postedAt: new Date().toISOString(),
+        });
 
       console.log(`✅ Posted: ${postId}`);
     } catch (err) {
       console.error(`❌ Failed to post ${postId}:`, err.message);
-      
+
       // ✅ Same safety here
-      await db.collection('posts').doc(postId).update({
-        status: 'failed',
+      await db.collection("posts").doc(postId).update({
+        status: "failed",
         error: err.message,
         failedAt: new Date().toISOString(),
       });
