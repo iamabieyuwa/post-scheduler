@@ -17,12 +17,12 @@
     "emoji-picker-react": "^4.12.2",
     "firebase": "^11.9.1",
     "firebase-admin": "^13.4.0",
-    "next": "15.2.8",
+    "next": "15.5.9",
     "openai": "^4.93.0",
     "postcss": "^8.5.6",
-    "react": "^18.2.0",
+    "react": "19.2.3",
     "react-datepicker": "^8.4.0",
-    "react-dom": "^18.2.0",
+    "react-dom": "19.2.3",
     "react-hot-toast": "^2.5.2",
     "react-icons": "^5.5.0",
     "react-quill": "^2.0.0",
@@ -34,8 +34,12 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.0.0",
+    "@types/node": "^25.0.3",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "eslint": "^9.0.0",
     "eslint-config-next": "15.2.4",
-    "tailwindcss": "^4.1.11"
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.9.3"
   }
 }

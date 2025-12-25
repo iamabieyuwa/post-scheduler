@@ -15,9 +15,8 @@ import PostPreview from "./PostPreview";
 import DropZone from "./DropZone";
 import { FaSpinner } from "react-icons/fa";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { db, auth } from "../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "../lib/firebase";
 
 export default function PostForm({
   onAdd,
@@ -29,8 +28,6 @@ export default function PostForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef(null);
-  const [showPreview, setShowPreview] = useState(false);
-  const [activePreview, setActivePreview] = useState("all");
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const router = useRouter();
@@ -43,6 +40,7 @@ export default function PostForm({
   const [newMedia, setNewMedia] = useState([]);
   const [newCarousel, setNewCarousel] = useState([]);
 
+  // --- Auth logic ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!user && pathname === "/dashboard") {
@@ -55,6 +53,7 @@ export default function PostForm({
     return () => unsubscribe();
   }, [router, pathname]);
 
+  // --- Sync logic ---
   useEffect(() => {
     if (initialData) {
       setForm(initialData);
@@ -74,33 +73,15 @@ export default function PostForm({
 
   if (checkingAuth)
     return (
-      <div className="flex justify-center items-center align-center mt-20">
+      <div className="flex justify-center items-center mt-20">
         <FaSpinner className="animate-spin text-white text-2xl" />
       </div>
     );
-
-  const handleChange = (e) => {
-    const { name, value, type, checked, files } = e.target;
-    setError("");
-    if (type === "file") {
-      if (name === "media") {
-        setNewMedia([...newMedia, ...Array.from(files)]);
-      } else if (name === "carousel") {
-        setNewCarousel([...newCarousel, ...Array.from(files)]);
-      }
-    } else {
-      setForm((prev) => ({ ...prev, [name]: value }));
-    }
-  };
 
   const removeExistingMedia = (i) =>
     setExistingMedia(existingMedia.filter((_, idx) => idx !== i));
   const removeNewMedia = (i) =>
     setNewMedia(newMedia.filter((_, idx) => idx !== i));
-  const removeExistingCarousel = (i) =>
-    setExistingCarousel(existingCarousel.filter((_, idx) => idx !== i));
-  const removeNewCarousel = (i) =>
-    setNewCarousel(newCarousel.filter((_, idx) => idx !== i));
 
   const getPlainText = (html) => {
     if (typeof window === "undefined") return "";
@@ -109,10 +90,8 @@ export default function PostForm({
     return div.textContent || div.innerText || "";
   };
 
-  const getCharLimit = () => 280;
-
   const plainText = getPlainText(form.content);
-  const charLimit = getCharLimit();
+  const charLimit = 280;
   const contentLength = plainText.length;
 
   async function uploadToCloudinary(file) {
@@ -123,7 +102,6 @@ export default function PostForm({
       const errorData = await res.json().catch(() => ({}));
       throw new Error(errorData?.error || "Upload failed");
     }
-
     const data = await res.json();
     return data.url;
   }
@@ -133,11 +111,10 @@ export default function PostForm({
     setError("");
     setLoading(true);
 
-    const { content, scheduledAt, postNow, variants, recurring, postFormat } =
-      form;
+    const { content, scheduledAt, postNow, variants, recurring, postFormat } = form;
     let finalContent = content;
 
-    // Handle variants (A/B testing)
+    // Handle Variants
     if (variants?.enabled && variants.variants.length > 0) {
       const options = variants.variants.filter((v) => v.trim() !== "");
       if (options.length > 0) {
@@ -151,86 +128,54 @@ export default function PostForm({
     const threadEnabled = thread.length > 0;
     const carouselEnabled = carousel.length > 0;
 
-    // Ensure there's something to post
+    // --- Validation ---
     if (!finalContent && !threadEnabled && !carouselEnabled) {
+      setLoading(false);
       return setError("Add content, a thread, or a carousel to post.");
     }
 
-    // Thread block validation
-    const invalidThread =
-      threadEnabled &&
-      thread.some((t) => !t.text.trim() && (!t.images || !t.images.length));
-    if (invalidThread) {
-      return setError("Each thread block must have text or image.");
+    if (threadEnabled) {
+        const invalidThread = thread.some(t => !t.text.trim() && (!t.images || !t.images.length));
+        if (invalidThread) {
+            setLoading(false);
+            return setError("Each thread block must have text or image.");
+        }
     }
 
-    // Twitter-specific media rules
-    const totalMedia = [...existingMedia, ...newMedia];
-    const imageCount = totalMedia.filter((f) =>
-      f.type?.startsWith("image/")
-    ).length;
-    const videoCount = totalMedia.filter((f) =>
-      f.type?.startsWith("video/")
-    ).length;
-
-    if (totalMedia.length > 4) {
-      return setError("You can only upload up to 4 media files for Twitter.");
-    }
-    if (videoCount > 1) {
-      return setError("Twitter only allows one video per post.");
-    }
-    if (videoCount >= 1 && imageCount >= 1) {
-      return setError(
-        "You can't mix images and video in a single Twitter post."
-      );
-    }
-
-    if (!postNow && !scheduledAt) {
-      return setError("Please select a date and time.");
+    if (contentLength > charLimit) {
+        setLoading(false);
+        return setError(`Content is too long for X (${contentLength}/${charLimit})`);
     }
 
     try {
-      // Upload media to Cloudinary
+      // 1. Upload Main Media
       const uploadedMedia = await Promise.all(
-        (newMedia || []).map(async (file) => {
+        newMedia.map(async (file) => {
           const url = await uploadToCloudinary(file);
-          return {
-            url,
-            type: file.type,
-            name: file.name,
-            size: file.size,
-          };
+          return { url, type: file.type, name: file.name, size: file.size };
         })
       );
 
+      // 2. Upload Carousel Media
       const uploadedCarousel = await Promise.all(
-        (newCarousel || []).map(async (file) => {
+        newCarousel.map(async (file) => {
           const url = await uploadToCloudinary(file);
-          return {
-            url,
-            type: file.type,
-            name: file.name,
-            size: file.size,
-          };
+          return { url, type: file.type, name: file.name, size: file.size };
         })
       );
 
-      // Upload thread images
+      // 3. Upload Thread Images
       let uploadedThread = thread;
       if (threadEnabled) {
         uploadedThread = await Promise.all(
           thread.map(async (block) => {
             const uploadedImages = await Promise.all(
               (block.images || []).map(async (file) => {
-                if (typeof file === "string") return file;
-                const url = await uploadToCloudinary(file);
-                return url;
+                if (typeof file === "string") return file; // Already uploaded
+                return await uploadToCloudinary(file);
               })
             );
-            return {
-              text: block.text,
-              images: uploadedImages,
-            };
+            return { text: block.text, images: uploadedImages };
           })
         );
       }
@@ -248,34 +193,33 @@ export default function PostForm({
           carousel: [...existingCarousel, ...uploadedCarousel],
         },
         userId: user.uid,
-        status: "pending",
+        status: "pending", // Worker picks this up
       };
 
       const cleanedPost = JSON.parse(JSON.stringify(newPost));
 
       if (isEdit && onSave) {
-        await onSave({ ...newPost, id: initialData?.id });
-        return;
+        await onSave({ ...cleanedPost, id: initialData?.id });
+      } else {
+        const docRef = await addDoc(collection(db, "posts"), {
+          ...cleanedPost,
+          createdAt: serverTimestamp(),
+        });
+        if (onAdd) onAdd({ ...cleanedPost, id: docRef.id });
       }
 
-      const docRef = await addDoc(collection(db, "posts"), {
-        ...cleanedPost,
-        createdAt: serverTimestamp(),
-      });
-
-      if (onAdd) onAdd({ ...cleanedPost, id: docRef.id });
-
-      toast.success("✅ Post saved to Firestore!");
+      // --- FULL RESET ---
+      toast.success("Success! Post Pilot is ready 🚀");
       setForm(getInitialFormState());
       setExistingMedia([]);
       setExistingCarousel([]);
       setNewMedia([]);
       setNewCarousel([]);
-      if (fileInputRef.current) fileInputRef.current.value = "";
       setError("");
+      
     } catch (err) {
-      console.error("❌ Failed to save post:", err);
-      toast.error("Could not save post to database.");
+      console.error("❌ Submission Error:", err);
+      toast.error(err.message || "Failed to save post");
     } finally {
       setLoading(false);
     }
@@ -286,96 +230,48 @@ export default function PostForm({
       onSubmit={handleSubmit}
       className="flex flex-col items-center gap-7 max-w-2xl w-full bg-white/5 backdrop-blur-md p-8 shadow-xl rounded-2xl border border-white/10"
     >
-      {/* Post Content */}
       <div className="w-full">
-        <label className="block text-sm font-medium text-gray-200 mb-2">
-          Post Content:
-        </label>
+        <div className="flex justify-between items-end mb-2">
+            <label className="text-sm font-medium text-gray-200">Post Content:</label>
+            <span className={`text-[10px] font-mono ${contentLength > charLimit ? 'text-red-500' : 'text-gray-500'}`}>
+                {contentLength}/{charLimit}
+            </span>
+        </div>
         <PostTextarea
           value={form.content}
-          onChange={(e) =>
-            setForm((prev) => ({ ...prev, content: e.target.value }))
-          }
+          onChange={(e) => setForm((prev) => ({ ...prev, content: e.target.value }))}
         />
         <EmojiPickerBox
-          onSelect={(emoji) =>
-            setForm((prev) => ({ ...prev, content: prev.content + emoji }))
-          }
+          onSelect={(emoji) => setForm((prev) => ({ ...prev, content: prev.content + emoji }))}
         />
-        {charLimit > 0 && (
-          <p
-            className={`text-xs mt-1 text-right ${
-              contentLength > charLimit ? "text-red-500" : "text-gray-300"
-            }`}
-          >
-            {contentLength} / {charLimit}
-          </p>
-        )}
       </div>
+
       <DropZone
-        label="📁 Import main media (Max 4)"
+        label="📁 Add Main Media (Max 4)"
         onDrop={(files) => {
           const incoming = Array.isArray(files) ? files : [files];
-          const total =
-            existingMedia.length + newMedia.length + incoming.length;
-
-          if (total > 4) {
-            toast.error("You can only upload up to 4 media files.");
-            return;
+          if (existingMedia.length + newMedia.length + incoming.length > 4) {
+            return toast.error("Maximum of 4 media items allowed.");
           }
-
           setNewMedia((prev) => [...prev, ...incoming]);
         }}
         multiple={true}
-        accept="image/*,audio/mpeg,video/mp4,video/webm"
-        max={4}
-        disabled={existingMedia.length + newMedia.length >= 4}
+        accept="image/*,video/mp4"
       />
+
+      {/* Main Media Previews */}
       {(newMedia.length > 0 || existingMedia.length > 0) && (
-        <div className="w-full mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4">
-          {[...existingMedia, ...newMedia].map((file, i) => {
-            const url = file.url || URL.createObjectURL(file);
-            const type = file.type || file.mimeType;
-
-            return (
-              <div
-                key={i}
-                className="relative group bg-gray-800 p-2 rounded shadow-sm"
-              >
-                {type?.startsWith("image/") && (
-                  <img
-                    src={url}
-                    alt={`media-${i}`}
-                    className="h-40 w-full object-contain rounded"
-                  />
-                )}
-                {type?.startsWith("video/") && (
-                  <video
-                    src={url}
-                    controls
-                    className="h-40 w-full object-contain rounded"
-                  />
-                )}
-                {type?.startsWith("audio/") && (
-                  <audio src={url} controls className="w-full" />
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (i < existingMedia.length) {
-                      removeExistingMedia(i);
-                    } else {
-                      removeNewMedia(i - existingMedia.length);
-                    }
-                  }}
-                  className="absolute top-2 right-2 bg-red-600 text-white text-xs px-2 py-1 rounded-full opacity-0 group-hover:opacity-100 transition"
-                >
-                  ✕
-                </button>
-              </div>
-            );
-          })}
+        <div className="w-full grid grid-cols-2 gap-4">
+          {[...existingMedia, ...newMedia].map((file, i) => (
+            <div key={i} className="relative group bg-gray-900/50 p-2 rounded-lg border border-white/5">
+              <MediaPreview file={file} />
+              <button
+                type="button"
+                onClick={() => i < existingMedia.length ? removeExistingMedia(i) : removeNewMedia(i - existingMedia.length)}
+                className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition shadow-lg"
+              >✕</button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -383,33 +279,48 @@ export default function PostForm({
         value={form.postFormat}
         onChange={(val) => setForm((prev) => ({ ...prev, postFormat: val }))}
       />
-      {/* The rest... */}
+
+      <div className="w-full h-px bg-white/10 my-2" />
+
       <RecurringPostOptions
         value={form.recurring}
         onChange={(val) => setForm((prev) => ({ ...prev, recurring: val }))}
         disabled={form.postNow}
       />
+
       <DateTimeInput
-        label="Post Date & Time"
+        label="Set Schedule Time"
         value={form.scheduledAt}
         onChange={(val) => setForm((prev) => ({ ...prev, scheduledAt: val }))}
         disabled={form.postNow}
       />
 
-      {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-      <PostNowToggle
-        checked={form.postNow}
-        onChange={(val) => setForm((prev) => ({ ...prev, postNow: val }))}
-      />
+      {error && (
+        <div className="w-full p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs text-center animate-pulse">
+            {error}
+        </div>
+      )}
+
+      <div className="w-full flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
+        <PostNowToggle
+            checked={form.postNow}
+            onChange={(val) => setForm((prev) => ({ ...prev, postNow: val }))}
+        />
+      </div>
+
       <button
         type="submit"
         disabled={loading}
-        className={`bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-md transition-all ${
-          loading ? "opacity-50 cursor-not-allowed" : ""
-        }`}
+        className="w-full py-4 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-3"
       >
-        {loading ? "Saving..." : isEdit ? "Update Post" : "Schedule Post"}
+        {loading ? <FaSpinner className="animate-spin" /> : (isEdit ? "Update Schedule" : "Confirm Schedule")}
       </button>
+
+      <div className="text-center opacity-40">
+        <p className="text-[10px] uppercase tracking-widest font-semibold">
+          Built by Abieyuwa Imina
+        </p>
+      </div>
     </form>
   );
 }

@@ -37,7 +37,7 @@ export async function GET(req) {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        // ✅ Use Basic Auth with your Client ID and Secret
+        // ✅ Use NEXT_PUBLIC variable for consistency if that's where your ID is stored
         Authorization: `Basic ${Buffer.from(
           `${process.env.NEXT_PUBLIC_TWITTER_CLIENT_ID}:${process.env.TWITTER_CLIENT_SECRET}`
         ).toString("base64")}`,
@@ -45,8 +45,8 @@ export async function GET(req) {
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code,
-        // ✅ CRITICAL: This must exactly match what the frontend sent
-        redirect_uri: process.env.NEXT_PUBLIC_TWITTER_CALLBACK_URL,
+        // ✅ MUST MATCH FRONTEND EXACTLY
+        redirect_uri: "https://post-scheduler-pearl.vercel.app/api/twitter/callback",
         client_id: process.env.NEXT_PUBLIC_TWITTER_CLIENT_ID,
         code_verifier: codeVerifier,
       }),
@@ -61,7 +61,6 @@ export async function GET(req) {
     return NextResponse.redirect(new URL("/connect?error=token_exchange_failed", req.url));
   }
 
-  // 🧠 Calculate expiration time (in milliseconds since epoch)
   const expiresAt = Date.now() + tokenData.expires_in * 1000;
 
   // 👤 Get Twitter user profile
@@ -111,6 +110,5 @@ export async function GET(req) {
     return NextResponse.redirect(new URL("/connect?error=firestore_write_failed", req.url));
   }
 
-  // ✅ Success - redirect back to /connect with a success flag
   return NextResponse.redirect(new URL("/connect?success=twitter_connected", req.url));
 }

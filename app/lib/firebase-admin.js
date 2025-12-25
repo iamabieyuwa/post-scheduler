@@ -1,16 +1,30 @@
-// lib/firebase-admin.js
-import { initializeApp, cert, getApps } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
-// Ensure we don’t initialize multiple times
-if (!getApps().length) {
-  initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-    }),
-  });
+export function initFirebaseAdmin() {
+  // only initialize once
+  if (!getApps().length) {
+    if (
+      !process.env.FIREBASE_PROJECT_ID ||
+      !process.env.FIREBASE_CLIENT_EMAIL ||
+      !process.env.FIREBASE_PRIVATE_KEY
+    ) {
+      throw new Error(
+        'Missing Firebase admin environment variables (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY).'
+      );
+    }
+
+    // Accept either literal \n sequences or actual newlines
+    const key = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n').trim();
+
+    initializeApp({
+      credential: cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: key,
+      }),
+    });
+  }
+
+  return getFirestore();
 }
-
-export const adminAuth = getAuth();

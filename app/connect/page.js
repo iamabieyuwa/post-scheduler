@@ -18,7 +18,7 @@ export default function ConnectAccountsPage() {
   const [connecting, setConnecting] = useState({ twitter: false });
   const [twitterUsername, setTwitterUsername] = useState("");
 
-  // Check auth and connection status on mount
+  // Handle Auth and Connection State
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (!u) {
@@ -35,12 +35,12 @@ export default function ConnectAccountsPage() {
 
           if (isTwitterConnected) {
             setTwitterUsername(data.twitterProfile?.username || "");
-            // Only toast if we just came back from a successful connection
+            // Show success toast if we just redirected back
             if (window.location.search.includes("success=twitter_connected")) {
               toast.success(`Connected to @${data.twitterProfile?.username}`);
             }
-            // Auto-redirect to dashboard if already connected
-            setTimeout(() => router.push("/dashboard"), 2000);
+            // Auto-redirect to dashboard
+            setTimeout(() => router.push("/dashboard"), 3000);
           }
         }
         setChecking(false);
@@ -49,15 +49,15 @@ export default function ConnectAccountsPage() {
     return () => unsub();
   }, [router]);
 
-  // Handle URL params like "disconnected"
+  // Handle Disconnect Toast
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("disconnected") === "twitter") {
-      toast.success("Disconnected from Twitter.");
-      // Clean URL
-      router.replace("/connect");
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("disconnected") === "twitter") {
+      toast.success("Disconnected from X (Twitter)");
+      // Clean the URL
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [router]);
+  }, []);
 
   const handleConnectTwitter = async () => {
     setConnecting((c) => ({ ...c, twitter: true }));
@@ -65,7 +65,7 @@ export default function ConnectAccountsPage() {
       const verifier = generateCodeVerifier();
       const challenge = await generateCodeChallenge(verifier);
       
-      // ✅ Security: Use Secure and SameSite flags for cookies
+      // Store verifier and firebase token in secure cookies for the backend callback
       localStorage.setItem("twitter_code_verifier", verifier);
       document.cookie = `twitter_code_verifier=${verifier}; path=/; Secure; SameSite=Lax`;
       
@@ -75,10 +75,10 @@ export default function ConnectAccountsPage() {
       const params = new URLSearchParams({
         response_type: "code",
         client_id: process.env.NEXT_PUBLIC_TWITTER_CLIENT_ID,
-        // ✅ Use the environment variable for consistency
-        redirect_uri: process.env.NEXT_PUBLIC_TWITTER_CALLBACK_URL,
+        // ✅ MUST BE HTTPS ON VERCEL
+        redirect_uri: "https://post-scheduler-pearl.vercel.app/api/twitter/callback",
         scope: "tweet.read tweet.write users.read offline.access",
-        state: "secureState123", 
+        state: "secureState123",
         code_challenge: challenge,
         code_challenge_method: "S256",
       });

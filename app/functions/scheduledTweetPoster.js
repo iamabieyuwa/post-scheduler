@@ -1,34 +1,31 @@
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
 import * as dotenv from 'dotenv';
-import { getValidTwitterToken } from '../utils/getValidTwitterAccessToken.js';
-import { uploadMediaToTwitter } from '../utils/uploadMediaToTwitter.js'; // <-- helper required
+import { initFirebaseAdmin } from '../lib/firebase-admin.js';
+import { getValidTwitterAccessToken } from '../lib/twitter.js';
+import { uploadMediaToTwitter } from '../utils/uploadMediaToTwitter.js';
 
 dotenv.config();
 
-if (!getApps().length) {
-  initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-    }),
-  });
-}
-
-const db = getFirestore();
-
 export async function postScheduledTweets() {
+  // ✅ 1. Get the database instance
+  const db = initFirebaseAdmin();
+
+  // 🛡️ 2. Safety Check: If db is null (happens during Vercel build phase), exit early
+  if (!db) {
+    console.log("⚠️ Database not initialized (likely build phase). Skipping.");
+    return;
+  }
+
   const now = new Date();
 
+  // Your existing query logic
   const snapshot = await db
     .collection('posts')
-    .where('status', '==', 'pending') // ✅ Only check for pending status
-    .where('scheduledAt', '<=', now.toISOString()) // ✅ Time has arrived
+    .where('status', '==', 'pending')
+    .where('scheduledAt', '<=', now.toISOString())
     .get();
 
   if (snapshot.empty) {
-    console.log('⏳ No scheduled tweets to post.');
+    console.log('⏳ No pending tweets to post.');
     return;
   }
 
@@ -45,7 +42,7 @@ export async function postScheduledTweets() {
         throw new Error('Missing Twitter tokens');
       }
 
-      const accessToken = await getValidTwitterToken(post.userId);
+      const accessToken = await getValidTwitterAccessToken(post.userId);
 
       const media = Array.isArray(post.media) ? post.media : [];
       const mediaIds = [];
@@ -126,6 +123,7 @@ export async function postScheduledTweets() {
         firstTweetId = result.data?.id;
       }
 
+      // ✅ 3. Ensure we use the Admin-safe update method (your syntax here was already good)
       await db.collection('posts').doc(postId).update({
         status: 'posted',
         twitterId: firstTweetId || null,
@@ -135,6 +133,8 @@ export async function postScheduledTweets() {
       console.log(`✅ Posted: ${postId}`);
     } catch (err) {
       console.error(`❌ Failed to post ${postId}:`, err.message);
+      
+      // ✅ Same safety here
       await db.collection('posts').doc(postId).update({
         status: 'failed',
         error: err.message,

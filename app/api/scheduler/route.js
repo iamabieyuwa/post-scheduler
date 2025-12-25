@@ -1,22 +1,19 @@
-export const runtime = 'nodejs';
-import {postScheduledTweets} from "../../functions/scheduledTweetPoster"
-export const config = {
-  schedule: '*/1 * * * *', // Every minute
-};
+// app/api/scheduler/route.js
+import { postScheduledTweets } from "../../functions/scheduledTweetPoster.js"
 
 export async function GET(req) {
-    const auth = req.headers.get('Authorization');
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return new Response('Unauthorized', { status: 401 });
-  }
   try {
-    console.log('🔁 Cron job triggered at', new Date().toISOString());
+    const authHeader = req.headers.get('authorization');
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      return new Response('Unauthorized', { status: 401 });
+    }
 
-    await postScheduledTweets(); // your function
-
-    return new Response("✅ Tweets checked and posted", { status: 200 });
+    // Now this function will be recognized!
+    await postScheduledTweets(); 
+    
+    return new Response(JSON.stringify({ message: "Success" }), { status: 200 });
   } catch (err) {
-    console.error("❌ Cron error:", err.message);
-    return new Response("Error posting tweets", { status: 500 });
+    console.error("SCHEDULER_CRASH:", err.message);
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
   }
 }
