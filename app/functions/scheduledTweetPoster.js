@@ -1,6 +1,6 @@
 import * as dotenv from 'dotenv';
+import { TwitterApi } from 'twitter-api-v2';
 import { initFirebaseAdmin } from '../lib/firebase-admin.js';
-import { getValidTwitterAccessToken } from '../lib/twitter.js';
 import { uploadMediaToTwitter } from '../utils/uploadMediaToTwitter.js';
 
 dotenv.config();
@@ -9,8 +9,15 @@ export async function postScheduledTweets() {
   const db = initFirebaseAdmin();
   if (!db) return;
 
-  const now = new Date();
+  // Initialize Twitter Client with OAuth 1.0a (for media support)
+  const twitterClient = new TwitterApi({
+    appKey: process.env.TWITTER_API_KEY,
+    appSecret: process.env.TWITTER_API_KEY_SECRET,
+    accessToken: process.env.TWITTER_ACCESS_TOKEN,
+    accessSecret: process.env.TWITTER_ACCESS_TOKEN_SECRET,
+  });
 
+  const now = new Date();
   const snapshot = await db
     .collection('posts')
     .where('status', '==', 'pending')
@@ -27,85 +34,56 @@ export async function postScheduledTweets() {
     const postId = doc.id;
 
     try {
-      const accessToken = await getValidTwitterAccessToken(post.userId);
-      if (!accessToken) throw new Error("Could not refresh Twitter token");
-
-      // 1. Process Main Media (Cloudinary URLs)
+      // 1. Process Main Media
       const media = Array.isArray(post.media) ? post.media : [];
       const mainMediaIds = [];
 
       for (const file of media) {
-        // file.url comes from your Cloudinary DB structure
-        const twitterMediaId = await uploadMediaToTwitter(file.url, accessToken);
+        // We now pass the client directly to the utility or handle it inside
+        const twitterMediaId = await uploadMediaToTwitter(file.url);
         if (twitterMediaId) mainMediaIds.push(twitterMediaId);
       }
 
       const thread = post.postFormat?.thread || [];
       const isThread = thread.length > 0;
-      let firstTweetId = null;
+      let lastTweetId = null;
 
       if (isThread) {
         // --- THREAD LOGIC ---
         for (let i = 0; i < thread.length; i++) {
           const block = thread[i];
-          const tweetData = { text: block.text || '' };
+          const tweetOptions = {};
 
-          // Handle media inside thread blocks
-          if (block.images?.length) {
-            const blockMediaIds = [];
-            for (const imgUrl of block.images) {
-              const mId = await uploadMediaToTwitter(imgUrl, accessToken);
-              if (mId) blockMediaIds.push(mId);
-            }
-            if (blockMediaIds.length > 0) tweetData.media = { media_ids: blockMediaIds };
-          } 
-          // If it's the first tweet of a thread, attach the main media
-          else if (i === 0 && mainMediaIds.length > 0) {
-            tweetData.media = { media_ids: mainMediaIds };
+          // Attach media to first tweet if available
+          if (i === 0 && mainMediaIds.length > 0) {
+            tweetOptions.media = { media_ids: mainMediaIds };
           }
 
-          const response = await fetch('https://api.twitter.com/2/tweets', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(
-              i === 0 ? tweetData : { ...tweetData, reply: { in_reply_to_tweet_id: firstTweetId } }
-            ),
-          });
+          // If not the first tweet, reply to the previous one
+          if (i > 0 && lastTweetId) {
+            tweetOptions.reply = { in_reply_to_tweet_id: lastTweetId };
+          }
 
-          const result = await response.json();
-          if (!response.ok) throw new Error(`Twitter Thread Error: ${JSON.stringify(result)}`);
-          if (i === 0) firstTweetId = result.data?.id;
+          const result = await twitterClient.v2.tweet(block.text || '', tweetOptions);
+          lastTweetId = result.data.id;
         }
       } else {
         // --- SINGLE TWEET LOGIC ---
-        const payload = { text: post.content || '' };
+        const tweetOptions = {};
         if (mainMediaIds.length > 0) {
-          payload.media = { media_ids: mainMediaIds };
+          tweetOptions.media = { media_ids: mainMediaIds };
         }
 
-        const res = await fetch('https://api.twitter.com/2/tweets', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
-
-        const result = await res.json();
-        if (!res.ok) throw new Error(`Twitter API Error: ${JSON.stringify(result)}`);
-        firstTweetId = result.data?.id;
+        const result = await twitterClient.v2.tweet(post.content || '', tweetOptions);
+        lastTweetId = result.data.id;
       }
 
       // Success Update
       await db.collection('posts').doc(postId).update({
         status: 'posted',
-        twitterId: firstTweetId || null,
+        twitterId: lastTweetId,
         postedAt: new Date().toISOString(),
-        error: null // Clear previous errors
+        error: null
       });
 
       console.log(`✅ Successfully posted: ${postId}`);

@@ -1,34 +1,27 @@
-export async function uploadMediaToTwitter(url, accessToken) {
+import { TwitterApi } from 'twitter-api-v2';
+
+export async function uploadMediaToTwitter(url) {
   try {
-    // 1. Fetch from Cloudinary
-    const mediaRes = await fetch(url);
-    if (!mediaRes.ok) throw new Error(`Cloudinary fetch failed: ${mediaRes.statusText}`);
-    
-    const arrayBuffer = await mediaRes.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // 2. Prepare Form Data (Twitter v1.1 style)
-    const formData = new FormData();
-    formData.append('media', new Blob([buffer]));
-
-    // 3. Upload to Twitter
-    const response = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-      },
-      body: formData,
+    // 1. Initialize Client with OAuth 1.0a (REQUIRED for Media)
+    const client = new TwitterApi({
+      appKey: process.env.TWITTER_API_KEY,
+      appSecret: process.env.TWITTER_API_KEY_SECRET,
+      accessToken: process.env.TWITTER_ACCESS_TOKEN,
+      accessSecret: process.env.TWITTER_ACCESS_TOKEN_SECRET,
     });
 
-    const data = await response.json();
-    if (!response.ok) {
-      console.error('❌ Twitter Media Upload Error:', data);
-      return null;
-    }
+    // 2. Fetch the image from Cloudinary
+    const response = await fetch(url);
+    const buffer = Buffer.from(await response.arrayBuffer());
 
-    return data.media_id_string;
+    // 3. Upload using the library's helper
+    // This handles the INIT/APPEND/FINALIZE logic perfectly
+    console.log("📤 Uploading to Twitter via OAuth 1.0a...");
+    const mediaId = await client.v1.uploadMedia(buffer, { type: 'png' });
+
+    return mediaId;
   } catch (err) {
-    console.error('❌ Media upload utility failed:', err.message);
+    console.error('❌ Media upload failed:', err.message);
     return null;
   }
 }
