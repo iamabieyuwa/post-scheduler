@@ -17,7 +17,7 @@ export async function uploadMediaToTwitter(url) {
     // 3. Upload using the library's helper
     // This handles the INIT/APPEND/FINALIZE logic perfectly
     console.log("📤 Uploading to Twitter via OAuth 1.0a...");
-    const mediaId = await client.v1.uploadMedia(buffer, { type: 'png' });
+    const mediaId = await client.v1.uploadMedia(buffer, { mimeType: 'image/png' });
 
     return mediaId;
   } catch (err) {
