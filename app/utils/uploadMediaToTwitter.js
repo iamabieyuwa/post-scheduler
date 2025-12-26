@@ -2,7 +2,6 @@ import { TwitterApi } from 'twitter-api-v2';
 
 export async function uploadMediaToTwitter(url) {
   try {
-    // 1. Initialize Client with OAuth 1.0a (REQUIRED for Media)
     const client = new TwitterApi({
       appKey: process.env.TWITTER_API_KEY,
       appSecret: process.env.TWITTER_API_KEY_SECRET,
@@ -10,14 +9,16 @@ export async function uploadMediaToTwitter(url) {
       accessSecret: process.env.TWITTER_ACCESS_TOKEN_SECRET,
     });
 
-    // 2. Fetch the image from Cloudinary
-    const response = await fetch(url);
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const mediaRes = await fetch(url);
+    if (!mediaRes.ok) throw new Error("Cloudinary fetch failed");
+    
+    const buffer = Buffer.from(await mediaRes.arrayBuffer());
 
-    // 3. Upload using the library's helper
-    // This handles the INIT/APPEND/FINALIZE logic perfectly
-    console.log("📤 Uploading to Twitter via OAuth 1.0a...");
-    const mediaId = await client.v1.uploadMedia(buffer, { mimeType: 'image/png' });
+    console.log("📤 Uploading media...");
+    // ✅ Fix: Use mimeType to avoid deprecation warnings
+    const mediaId = await client.v1.uploadMedia(buffer, { 
+      mimeType: url.endsWith('.png') ? 'image/png' : 'image/jpeg' 
+    });
 
     return mediaId;
   } catch (err) {
