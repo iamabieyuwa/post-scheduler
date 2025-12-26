@@ -34,10 +34,15 @@ export async function postScheduledTweets() {
     const postId = doc.id;
 
     try {
+      
       // 1. Process Main Media
       const media = Array.isArray(post.media) ? post.media : [];
       const mainMediaIds = [];
 
+      const result = await twitterClient.v2.tweet(post.content || '', tweetOptions);
+  
+  // 2. Add a MANDATORY 10-second pause if you have multiple posts
+  await new Promise(resolve => setTimeout(resolve, 10000));
       for (const file of media) {
         // We now pass the client directly to the utility or handle it inside
         const twitterMediaId = await uploadMediaToTwitter(file.url);
@@ -90,6 +95,11 @@ export async function postScheduledTweets() {
 
     } catch (err) {
       console.error(`❌ Failed to post ${postId}:`, err.message);
+      if (err.code === 429) {
+    console.error("🛑 Rate limit hit. Exiting to avoid a longer block.");
+    // We stop the whole function. We don't try the next post in the loop.
+    return; 
+  }
       await db.collection('posts').doc(postId).update({
         status: 'failed',
         error: err.message,
