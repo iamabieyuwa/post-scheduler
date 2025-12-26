@@ -2,9 +2,20 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
-import "../../../lib/firebase-admin"; // initializes admin app
+// ✅ Import the initialization function
+import { initFirebaseAdmin } from "../../../lib/firebase-admin"; 
 
 export async function GET(req) {
+  // 1. CRITICAL: Initialize Firebase and get the DB instance immediately
+  // This ensures the 'default' app is ready for getAuth() and getFirestore()
+  let db;
+  try {
+    db = initFirebaseAdmin();
+  } catch (error) {
+    console.error("❌ Firebase Initialization failed:", error.message);
+    return NextResponse.redirect(new URL("/connect?error=internal_server_error", req.url));
+  }
+
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
 
@@ -20,14 +31,14 @@ export async function GET(req) {
     return NextResponse.redirect(new URL("/connect?error=missing_verifier_or_token", req.url));
   }
 
-  // ✅ Decode Firebase token to get user UID
+  // 2. verifyIdToken now has a registered Firebase app to use
   let uid;
   try {
     const decoded = await getAuth().verifyIdToken(firebaseToken);
     uid = decoded.uid;
   } catch (err) {
-    console.error("❌ Invalid Firebase token", err);
-    return NextResponse.redirect(new URL("/connect?error=invalid_token", req.url));
+    console.error("❌ Firebase Auth Verification Failed:", err.message);
+    return NextResponse.redirect(new URL("/connect?error=firebase_auth_failed", req.url));
   }
 
   // 🎫 Exchange authorization code for access + refresh tokens
@@ -37,7 +48,6 @@ export async function GET(req) {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        // ✅ Use NEXT_PUBLIC variable for consistency if that's where your ID is stored
         Authorization: `Basic ${Buffer.from(
           `${process.env.NEXT_PUBLIC_TWITTER_CLIENT_ID}:${process.env.TWITTER_CLIENT_SECRET}`
         ).toString("base64")}`,
@@ -45,7 +55,6 @@ export async function GET(req) {
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code,
-        // ✅ MUST MATCH FRONTEND EXACTLY
         redirect_uri: "https://post-scheduler-pearl.vercel.app/api/twitter/callback",
         client_id: process.env.NEXT_PUBLIC_TWITTER_CLIENT_ID,
         code_verifier: codeVerifier,
@@ -83,7 +92,7 @@ export async function GET(req) {
 
   // 💾 Save to Firestore
   try {
-    const db = getFirestore();
+    // db is already initialized at the top of the function
     await db.collection("users").doc(uid).set(
       {
         twitterTokens: {
@@ -105,6 +114,10 @@ export async function GET(req) {
       },
       { merge: true }
     );
+
+    // ✅ CLEANUP: Remove temporary cookies after successful connection
+    cookieStore.delete("twitter_code_verifier");
+    // Only delete firebase_token if you don't need it for the rest of the session
   } catch (err) {
     console.error("❌ Firestore write failed", err);
     return NextResponse.redirect(new URL("/connect?error=firestore_write_failed", req.url));
