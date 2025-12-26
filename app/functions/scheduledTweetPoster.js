@@ -9,7 +9,7 @@ export async function postScheduledTweets() {
   const db = initFirebaseAdmin();
   if (!db) return;
 
-  // Initialize Twitter Client with OAuth 1.0a (for media support)
+  // Initialize Twitter Client with OAuth 1.0a (API Keys + Access Tokens)
   const twitterClient = new TwitterApi({
     appKey: process.env.TWITTER_API_KEY,
     appSecret: process.env.TWITTER_API_KEY_SECRET,
@@ -34,17 +34,11 @@ export async function postScheduledTweets() {
     const postId = doc.id;
 
     try {
-      
-      // 1. Process Main Media
+      // 1. Process Media (Cloudinary URLs)
       const media = Array.isArray(post.media) ? post.media : [];
       const mainMediaIds = [];
 
-      const result = await twitterClient.v2.tweet(post.content || '', tweetOptions);
-  
-  // 2. Add a MANDATORY 10-second pause if you have multiple posts
-  await new Promise(resolve => setTimeout(resolve, 10000));
       for (const file of media) {
-        // We now pass the client directly to the utility or handle it inside
         const twitterMediaId = await uploadMediaToTwitter(file.url);
         if (twitterMediaId) mainMediaIds.push(twitterMediaId);
       }
@@ -57,23 +51,29 @@ export async function postScheduledTweets() {
         // --- THREAD LOGIC ---
         for (let i = 0; i < thread.length; i++) {
           const block = thread[i];
+          
+          // ✅ FIX: Initialize tweetOptions for every block
           const tweetOptions = {};
 
-          // Attach media to first tweet if available
+          // Attach media only to the first tweet of the thread
           if (i === 0 && mainMediaIds.length > 0) {
             tweetOptions.media = { media_ids: mainMediaIds };
           }
 
-          // If not the first tweet, reply to the previous one
+          // Reply to the previous tweet in the thread
           if (i > 0 && lastTweetId) {
             tweetOptions.reply = { in_reply_to_tweet_id: lastTweetId };
           }
 
           const result = await twitterClient.v2.tweet(block.text || '', tweetOptions);
           lastTweetId = result.data.id;
+
+          // Mandatory 5s cooldown between thread parts to avoid 429
+          await new Promise(resolve => setTimeout(resolve, 5000));
         }
       } else {
         // --- SINGLE TWEET LOGIC ---
+        // ✅ FIX: Initialize tweetOptions here
         const tweetOptions = {};
         if (mainMediaIds.length > 0) {
           tweetOptions.media = { media_ids: mainMediaIds };
@@ -93,13 +93,18 @@ export async function postScheduledTweets() {
 
       console.log(`✅ Successfully posted: ${postId}`);
 
+      // General cooldown between separate posts
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
     } catch (err) {
       console.error(`❌ Failed to post ${postId}:`, err.message);
+
+      // 🚨 RATE LIMIT GUARD: Exit immediately if we hit a 429
       if (err.code === 429) {
-    console.error("🛑 Rate limit hit. Exiting to avoid a longer block.");
-    // We stop the whole function. We don't try the next post in the loop.
-    return; 
-  }
+        console.error("🛑 Rate limit hit. Exiting function to avoid longer block.");
+        return; 
+      }
+
       await db.collection('posts').doc(postId).update({
         status: 'failed',
         error: err.message,
